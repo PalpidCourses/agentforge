@@ -30,32 +30,27 @@ header { position:fixed; top:0; width:100%; padding:0.75rem 2rem; background:rgb
 h1 { font-size:1.6rem; font-weight:600; letter-spacing:-1px; margin-bottom:0.25rem; }
 .dash-sub { color:var(--text-dim); font-size:0.8rem; margin-bottom:1.5rem; font-family:'JetBrains Mono',monospace; }
 
-/* Stat cards */
 .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.75rem; margin-bottom:2rem; }
 .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem; }
 .stat-card:hover { border-color:rgba(0,255,136,0.3); }
 .stat-label { font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.25rem; }
 .stat-value { font-size:1.6rem; font-weight:700; color:var(--accent); font-family:'JetBrains Mono',monospace; }
-.stat-value.blue { color:var(--blue); }
-.stat-value.yellow { color:var(--yellow); }
+.stat-value.blue { color:var(--blue); } .stat-value.yellow { color:var(--yellow); }
 
-/* Tabs */
 .tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:1.5rem; overflow-x:auto; }
 .tab { font-family:'JetBrains Mono',monospace; font-size:0.75rem; padding:10px 18px; background:transparent; color:var(--text-dim); border:none; cursor:pointer; transition:all 0.2s; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; }
-.tab:hover { color:var(--text); }
-.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab:hover { color:var(--text); } .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
 .tab-count { font-size:0.6rem; background:var(--accent-glow); color:var(--accent); padding:1px 6px; border-radius:8px; margin-left:6px; }
 
-/* Table */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:1.5rem; }
 .data-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
 .data-table th { text-align:left; padding:0.75rem 1rem; border-bottom:2px solid var(--border); color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; }
 .data-table td { padding:0.6rem 1rem; border-bottom:1px solid var(--border); max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .data-table tr:last-child td { border-bottom:none; }
-.data-table tr:hover { background:rgba(0,255,136,0.02); }
+.clickable-row { cursor:pointer; transition:background 0.15s; }
+.clickable-row:hover { background:rgba(0,255,136,0.04) !important; }
 .mono { font-family:'JetBrains Mono',monospace; font-size:0.75rem; }
-.id-cell { color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:0.75rem; cursor:pointer; }
-.id-cell:hover { text-decoration:underline; }
+.id-cell { color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:0.75rem; }
 .badge { display:inline-block; font-family:'JetBrains Mono',monospace; font-size:0.6rem; padding:2px 8px; border-radius:4px; }
 .badge-green { color:var(--accent); background:var(--accent-glow); }
 .badge-yellow { color:var(--yellow); background:rgba(255,204,0,0.1); }
@@ -63,19 +58,12 @@ h1 { font-size:1.6rem; font-weight:600; letter-spacing:-1px; margin-bottom:0.25r
 .badge-dim { color:var(--text-dim); background:rgba(122,122,146,0.1); }
 .delete-btn { font-family:'JetBrains Mono',monospace; font-size:0.65rem; padding:4px 10px; background:transparent; color:var(--text-dim); border:1px solid var(--border); border-radius:4px; cursor:pointer; }
 .delete-btn:hover { border-color:var(--red); color:var(--red); background:rgba(255,68,68,0.1); }
+.payload-preview { color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:0.7rem; }
 
-/* Payload viewer */
-.payload-cell { max-width:400px; }
-.payload-preview { color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:0.7rem; cursor:pointer; }
-.payload-preview:hover { color:var(--accent); }
-
-/* Filter bar */
 .filter-bar { display:flex; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap; align-items:center; }
-.filter-bar input, .filter-bar select { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:6px 12px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:0.75rem; outline:none; }
-.filter-bar input:focus, .filter-bar select:focus { border-color:var(--accent); }
-.filter-label { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; }
+.filter-bar input,.filter-bar select { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:6px 12px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:0.75rem; outline:none; }
+.filter-bar input:focus,.filter-bar select:focus { border-color:var(--accent); }
 
-/* Pagination */
 .pagination { display:flex; justify-content:space-between; align-items:center; margin-top:1rem; font-family:'JetBrains Mono',monospace; font-size:0.75rem; color:var(--text-dim); }
 .page-btn { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:4px 12px; border-radius:4px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:0.7rem; }
 .page-btn:hover { border-color:var(--accent); color:var(--accent); }
@@ -88,19 +76,33 @@ h1 { font-size:1.6rem; font-weight:600; letter-spacing:-1px; margin-bottom:0.25r
 .refresh-info { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:var(--text-dim); text-align:center; margin-top:1.5rem; }
 .refresh-info span { color:var(--accent); }
 
-/* Modal */
-.modal-overlay { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center; }
+/* Detail modal */
+.modal-overlay { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center; }
 .modal-overlay.active { display:flex; }
-.modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:2rem; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; }
-.modal h3 { font-size:1rem; margin-bottom:0.75rem; }
-.modal-pre { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; font-family:'JetBrains Mono',monospace; font-size:0.75rem; white-space:pre-wrap; word-break:break-all; max-height:400px; overflow-y:auto; color:var(--text); margin:0.75rem 0; }
-.modal-actions { display:flex; gap:0.75rem; justify-content:flex-end; margin-top:1rem; }
-.modal-close { font-family:'JetBrains Mono',monospace; font-size:0.8rem; padding:8px 18px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer; }
-.modal-danger { font-family:'JetBrains Mono',monospace; font-size:0.8rem; padding:8px 18px; background:var(--red); color:#fff; border:none; border-radius:6px; cursor:pointer; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:0; max-width:700px; width:92%; max-height:85vh; overflow:hidden; display:flex; flex-direction:column; }
+.modal-header { padding:1.25rem 1.5rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+.modal-header h3 { font-size:1rem; font-weight:600; }
+.modal-close-x { background:none; border:none; color:var(--text-dim); font-size:1.2rem; cursor:pointer; padding:4px 8px; }
+.modal-close-x:hover { color:var(--text); }
+.modal-body { padding:1.5rem; overflow-y:auto; flex:1; }
+.modal-footer { padding:1rem 1.5rem; border-top:1px solid var(--border); display:flex; gap:0.75rem; justify-content:flex-end; }
+.modal-btn { font-family:'JetBrains Mono',monospace; font-size:0.8rem; padding:8px 18px; border-radius:6px; cursor:pointer; border:none; }
+.modal-btn-default { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.modal-btn-danger { background:var(--red); color:#fff; }
+
+/* Detail fields */
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1.25rem; }
+.detail-field { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.75rem 1rem; }
+.detail-field.full { grid-column:1/-1; }
+.detail-label { font-family:'JetBrains Mono',monospace; font-size:0.6rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:0.25rem; }
+.detail-value { font-family:'JetBrains Mono',monospace; font-size:0.8rem; color:var(--text); word-break:break-all; }
+.detail-value.accent { color:var(--accent); }
+.detail-value.large { font-size:0.75rem; white-space:pre-wrap; max-height:300px; overflow-y:auto; line-height:1.7; }
 
 @media(max-width:768px) {
   header{padding:0.75rem 1rem} .dashboard{padding:4.5rem 1rem 2rem} .stats-grid{grid-template-columns:repeat(2,1fr)}
   .data-table{font-size:0.7rem} .data-table th,.data-table td{padding:0.5rem 0.6rem} .hide-mobile{display:none}
+  .detail-grid{grid-template-columns:1fr} .modal{width:96%;max-height:90vh}
 }
 </style>
 </head>
@@ -116,51 +118,42 @@ h1 { font-size:1.6rem; font-weight:600; letter-spacing:-1px; margin-bottom:0.25r
   </div>
 </header>
 
-<div class="dashboard" id="dashboard">
-  <div class="loading" id="loadingState"><div class="spinner"></div>Loading dashboard...</div>
-</div>
+<div class="dashboard" id="dashboard"><div class="loading"><div class="spinner"></div>Loading dashboard...</div></div>
 
-<div class="modal-overlay" id="modal">
-  <div class="modal" id="modalContent"></div>
-</div>
+<div class="modal-overlay" id="modal"><div class="modal" id="modalInner"></div></div>
 
 <script>
-const S = {}; // state
+// ── State ──
+const S = { filterAgent:'', filterStatus:'', filterNamespace:'' };
+const _cache = {}; // tab -> row data for click handlers
 let currentTab = 'overview';
 let pageOffsets = { messages:0, memory:0, queue:0, shared:0 };
 
-// ── Fetch helpers ──
+// ── API ──
 async function api(path) {
   const r = await fetch(path, {credentials:'same-origin'});
-  if (r.status === 401) { window.location.href='/admin/login'; return null; }
+  if (r.status===401) { window.location.href='/admin/login'; return null; }
   return r.ok ? r.json() : null;
 }
 
-async function apiDelete(path) {
-  const r = await fetch(path, {method:'DELETE', credentials:'same-origin'});
-  return r.ok;
-}
-
-// ── Load data ──
+// ── Load ──
 async function loadDashboard() {
   const data = await api('/admin/api/dashboard');
   if (!data) return;
   S.dashboard = data;
-  render();
+  if (currentTab !== 'overview') await loadTab(currentTab, true);
+  else render();
 }
 
-async function loadTab(tab) {
+async function loadTab(tab, silent) {
   currentTab = tab;
   if (tab === 'overview') { render(); return; }
-  const map = {
-    messages: '/admin/api/messages', memory: '/admin/api/memory',
-    queue: '/admin/api/queue', webhooks: '/admin/api/webhooks',
-    schedules: '/admin/api/schedules', shared: '/admin/api/shared-memory',
-  };
+  if (!silent) render(); // show loading state
+  const map = { messages:'/admin/api/messages', memory:'/admin/api/memory', queue:'/admin/api/queue', webhooks:'/admin/api/webhooks', schedules:'/admin/api/schedules', shared:'/admin/api/shared-memory' };
   let url = map[tab] + `?limit=100&offset=${pageOffsets[tab]||0}`;
   if (S.filterAgent) url += `&agent_id=${S.filterAgent}`;
-  if (tab === 'queue' && S.filterStatus) url += `&status=${S.filterStatus}`;
-  if (tab === 'shared' && S.filterNamespace) url += `&namespace=${S.filterNamespace}`;
+  if (tab==='queue' && S.filterStatus) url += `&status=${S.filterStatus}`;
+  if (tab==='shared' && S.filterNamespace) url += `&namespace=${encodeURIComponent(S.filterNamespace)}`;
   const data = await api(url);
   if (data) { S[tab] = data; render(); }
 }
@@ -173,274 +166,327 @@ function render() {
 
   let h = `<h1>Admin Dashboard</h1><p class="dash-sub">${new Date(d.timestamp).toLocaleString()}</p>`;
   h += `<div class="stats-grid">
-    ${statCard('Agents',s.total_agents)} ${statCard('Public',s.public_agents)}
-    ${statCard('Jobs',s.total_jobs,'blue')} ${statCard('Pending',s.pending_jobs,'yellow')}
-    ${statCard('Memory',s.memory_keys)} ${statCard('Shared',s.shared_memory_keys)}
-    ${statCard('Messages',s.messages_relayed,'blue')} ${statCard('WS Conns',s.websocket_connections)}
-    ${statCard('Webhooks',s.active_webhooks)} ${statCard('Schedules',s.active_schedules)}
+    ${sc('Agents',s.total_agents)}${sc('Public',s.public_agents)}${sc('Jobs',s.total_jobs,'blue')}${sc('Pending',s.pending_jobs,'yellow')}
+    ${sc('Memory',s.memory_keys)}${sc('Shared',s.shared_memory_keys)}${sc('Messages',s.messages_relayed,'blue')}${sc('WS',s.websocket_connections)}
+    ${sc('Webhooks',s.active_webhooks)}${sc('Schedules',s.active_schedules)}
   </div>`;
 
-  // Tabs
-  const tabs = [
-    ['overview','Overview'], ['messages','Messages',s.messages_relayed], ['memory','Memory',s.memory_keys],
-    ['queue','Queue',s.total_jobs], ['webhooks','Webhooks',s.active_webhooks],
-    ['schedules','Schedules',s.active_schedules], ['shared','Shared Memory',s.shared_memory_keys],
-  ];
+  const tabs = [['overview','Overview'],['messages','Messages',s.messages_relayed],['memory','Memory',s.memory_keys],['queue','Queue',s.total_jobs],['webhooks','Webhooks',s.active_webhooks],['schedules','Schedules',s.active_schedules],['shared','Shared Memory',s.shared_memory_keys]];
   h += '<div class="tabs">';
-  for (const [id,label,count] of tabs) {
-    h += `<button class="tab ${currentTab===id?'active':''}" onclick="loadTab('${id}')">${label}${count!==undefined?`<span class="tab-count">${count}</span>`:''}</button>`;
-  }
+  for (const [id,label,cnt] of tabs) h += `<button class="tab ${currentTab===id?'active':''}" onclick="loadTab('${id}')">${label}${cnt!==undefined?`<span class="tab-count">${cnt}</span>`:''}</button>`;
   h += '</div>';
 
-  // Tab content
-  if (currentTab === 'overview') h += renderOverview(d);
-  else if (currentTab === 'messages') h += renderMessages();
-  else if (currentTab === 'memory') h += renderMemory();
-  else if (currentTab === 'queue') h += renderQueue();
-  else if (currentTab === 'webhooks') h += renderWebhooks();
-  else if (currentTab === 'schedules') h += renderSchedules();
-  else if (currentTab === 'shared') h += renderShared();
-
+  const renderers = { overview:renderOverview, messages:renderMessages, memory:renderMemory, queue:renderQueue, webhooks:renderWebhooks, schedules:renderSchedules, shared:renderShared };
+  h += (renderers[currentTab] || renderOverview)(S.dashboard);
   h += '<div class="refresh-info">Auto-refresh every <span>15s</span></div>';
   document.getElementById('dashboard').innerHTML = h;
 }
 
-function statCard(label,val,color) {
-  return `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value ${color||''}">${val}</div></div>`;
-}
-function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
-function timeAgo(iso) {
-  if(!iso)return'never'; const d=(Date.now()-new Date(iso).getTime())/1000;
-  if(d<60)return Math.floor(d)+'s ago'; if(d<3600)return Math.floor(d/60)+'m ago';
-  if(d<86400)return Math.floor(d/3600)+'h ago'; return Math.floor(d/86400)+'d ago';
-}
-function shortId(id) { return id && id.length > 20 ? id.slice(0,20)+'...' : id; }
-function preview(s, n=80) { return s && s.length > n ? s.slice(0,n)+'...' : s||''; }
-function statusBadge(st) {
-  if(st==='completed') return '<span class="badge badge-green">completed</span>';
-  if(st==='processing') return '<span class="badge badge-yellow">processing</span>';
-  if(st==='pending') return '<span class="badge badge-blue">pending</span>';
-  return `<span class="badge badge-dim">${esc(st)}</span>`;
+function sc(l,v,c) { return `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value ${c||''}">${v}</div></div>`; }
+function e(s) { return s!=null ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+function ago(iso) { if(!iso)return'never';const d=(Date.now()-new Date(iso).getTime())/1000;if(d<60)return Math.floor(d)+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago'; }
+function short(id) { return id&&id.length>22 ? id.slice(0,22)+'\u2026' : id||''; }
+function pre(s,n=80) { return s&&s.length>n ? s.slice(0,n)+'\u2026' : s||''; }
+function sBadge(st) { const m={completed:'green',processing:'yellow',pending:'blue'}; return `<span class="badge badge-${m[st]||'dim'}">${e(st)}</span>`; }
+function pretty(s) { try{return JSON.stringify(JSON.parse(s),null,2)}catch(x){return s} }
+
+function agentSel() {
+  const aa = S.dashboard?.agents||[];
+  let h = '<select onchange="S.filterAgent=this.value;pageOffsets[currentTab]=0;loadTab(currentTab)"><option value="">All agents</option>';
+  for (const a of aa) h += `<option value="${e(a.agent_id)}"${S.filterAgent===a.agent_id?' selected':''}>${e(a.name||short(a.agent_id))}</option>`;
+  return h+'</select>';
 }
 
-function agentFilter() {
-  const agents = S.dashboard?.agents || [];
-  let h = '<select onchange="S.filterAgent=this.value;pageOffsets[currentTab]=0;loadTab(currentTab)">';
-  h += '<option value="">All agents</option>';
-  for (const a of agents) h += `<option value="${esc(a.agent_id)}" ${S.filterAgent===a.agent_id?'selected':''}>${esc(a.name||a.agent_id)}</option>`;
-  return h + '</select>';
-}
-
-function paginator(data, key) {
-  if (!data) return '';
-  const off = pageOffsets[key]||0;
-  return `<div class="pagination">
-    <span>Showing ${off+1}-${Math.min(off+data.limit,data.total)} of ${data.total}</span>
-    <div>
-      <button class="page-btn" ${off===0?'disabled':''} onclick="pageOffsets['${key}']-=100;loadTab('${key}')">Prev</button>
-      <button class="page-btn" ${off+data.limit>=data.total?'disabled':''} onclick="pageOffsets['${key}']+=100;loadTab('${key}')">Next</button>
-    </div>
-  </div>`;
+function pager(data,key) {
+  if(!data||!data.total)return'';const o=pageOffsets[key]||0;
+  return `<div class="pagination"><span>Showing ${o+1}\u2013${Math.min(o+(data.limit||100),data.total)} of ${data.total}</span><div><button class="page-btn"${o===0?' disabled':''} onclick="pageOffsets['${key}']-=100;loadTab('${key}')">Prev</button> <button class="page-btn"${o+(data.limit||100)>=data.total?' disabled':''} onclick="pageOffsets['${key}']+=100;loadTab('${key}')">Next</button></div></div>`;
 }
 
 // ── Tab renderers ──
 function renderOverview(d) {
-  if (!d.agents.length) return '<div class="empty">No agents registered yet</div>';
-  let h = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Agent ID</th><th>Name</th><th class="hide-mobile">Description</th><th>Visibility</th><th>Requests</th><th class="hide-mobile">Last Seen</th><th></th></tr></thead><tbody>';
-  for (const a of d.agents) {
-    h += `<tr>
-      <td><span class="id-cell" onclick="viewAgent('${esc(a.agent_id)}')">${esc(shortId(a.agent_id))}</span></td>
-      <td class="mono">${a.name?esc(a.name):'<span style="color:var(--text-dim)">unnamed</span>'}</td>
-      <td class="hide-mobile" style="color:var(--text-dim);font-size:0.75rem">${esc(preview(a.description,50))}</td>
-      <td>${a.public?'<span class="badge badge-green">PUBLIC</span>':'<span class="badge badge-dim">PRIVATE</span>'}</td>
+  if(!d.agents.length) return '<div class="empty">No agents registered yet</div>';
+  _cache.agents = d.agents;
+  let h = '<div class="table-wrap"><table class="data-table"><thead><tr><th>Agent ID</th><th>Name</th><th class="hide-mobile">Description</th><th>Vis</th><th>Reqs</th><th class="hide-mobile">Last Seen</th><th></th></tr></thead><tbody>';
+  d.agents.forEach((a,i) => {
+    h += `<tr class="clickable-row" onclick="viewAgent('${e(a.agent_id)}')">
+      <td><span class="id-cell">${e(short(a.agent_id))}</span></td>
+      <td class="mono">${a.name?e(a.name):'<span style="color:var(--text-dim)">unnamed</span>'}</td>
+      <td class="hide-mobile" style="color:var(--text-dim);font-size:0.75rem">${e(pre(a.description,50))}</td>
+      <td>${a.public?'<span class="badge badge-green">PUB</span>':'<span class="badge badge-dim">PRV</span>'}</td>
       <td class="mono">${a.request_count||0}</td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(a.last_seen)}</td>
-      <td><button class="delete-btn" onclick="confirmDeleteAgent('${esc(a.agent_id)}')">Delete</button></td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(a.last_seen)}</td>
+      <td><button class="delete-btn" onclick="event.stopPropagation();confirmDel('${e(a.agent_id)}')">Delete</button></td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>';
+  });
+  return h+'</tbody></table></div>';
 }
 
 function renderMessages() {
   const data = S.messages;
-  if (!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
-  let h = `<div class="filter-bar">${agentFilter()}</div>`;
-  if (!data.messages.length) return h + '<div class="empty">No messages</div>';
+  if(!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
+  _cache.messages = data.messages;
+  let h = `<div class="filter-bar">${agentSel()}</div>`;
+  if(!data.messages.length) return h+'<div class="empty">No messages</div>';
   h += '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>From</th><th>To</th><th>Channel</th><th>Payload</th><th class="hide-mobile">Sent</th><th class="hide-mobile">Read</th></tr></thead><tbody>';
-  for (const m of data.messages) {
-    h += `<tr>
-      <td class="mono" style="color:var(--accent)">${esc(shortId(m.message_id))}</td>
-      <td class="mono">${esc(shortId(m.from_agent))}</td>
-      <td class="mono">${esc(shortId(m.to_agent))}</td>
-      <td class="mono">${esc(m.channel)}</td>
-      <td class="payload-cell"><span class="payload-preview" onclick="viewPayload('Message',${JSON.stringify(JSON.stringify(m.payload))})">${esc(preview(m.payload))}</span></td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(m.created_at)}</td>
+  data.messages.forEach((m,i) => {
+    h += `<tr class="clickable-row" onclick="viewMessage(${i})">
+      <td class="id-cell">${e(short(m.message_id))}</td>
+      <td class="mono">${e(short(m.from_agent))}</td><td class="mono">${e(short(m.to_agent))}</td>
+      <td class="mono">${e(m.channel)}</td>
+      <td><span class="payload-preview">${e(pre(m.payload))}</span></td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(m.created_at)}</td>
       <td class="hide-mobile">${m.read_at?'<span class="badge badge-green">read</span>':'<span class="badge badge-dim">unread</span>'}</td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>' + paginator(data,'messages');
+  });
+  return h+'</tbody></table></div>'+pager(data,'messages');
 }
 
 function renderMemory() {
   const data = S.memory;
-  if (!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
-  let h = `<div class="filter-bar">${agentFilter()}</div>`;
-  if (!data.entries.length) return h + '<div class="empty">No memory entries</div>';
+  if(!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
+  _cache.memory = data.entries;
+  let h = `<div class="filter-bar">${agentSel()}</div>`;
+  if(!data.entries.length) return h+'<div class="empty">No memory entries</div>';
   h += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Agent</th><th>Namespace</th><th>Key</th><th>Value</th><th class="hide-mobile">Updated</th><th class="hide-mobile">Expires</th></tr></thead><tbody>';
-  for (const e of data.entries) {
-    h += `<tr>
-      <td class="mono" style="color:var(--accent)">${esc(shortId(e.agent_id))}</td>
-      <td class="mono">${esc(e.namespace)}</td>
-      <td class="mono">${esc(e.key)}</td>
-      <td class="payload-cell"><span class="payload-preview" onclick="viewPayload('Memory: ${esc(e.key)}',${JSON.stringify(JSON.stringify(e.value))})">${esc(preview(e.value))}</span></td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(e.updated_at)}</td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${e.expires_at?timeAgo(e.expires_at):'never'}</td>
+  data.entries.forEach((m,i) => {
+    h += `<tr class="clickable-row" onclick="viewMemEntry(${i})">
+      <td class="id-cell">${e(short(m.agent_id))}</td><td class="mono">${e(m.namespace)}</td><td class="mono">${e(m.key)}</td>
+      <td><span class="payload-preview">${e(pre(m.value))}</span></td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(m.updated_at)}</td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${m.expires_at?ago(m.expires_at):'never'}</td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>' + paginator(data,'memory');
+  });
+  return h+'</tbody></table></div>'+pager(data,'memory');
 }
 
 function renderQueue() {
   const data = S.queue;
-  if (!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
-  let h = `<div class="filter-bar">${agentFilter()}
-    <select onchange="S.filterStatus=this.value;pageOffsets.queue=0;loadTab('queue')">
-      <option value="">All statuses</option><option value="pending" ${S.filterStatus==='pending'?'selected':''}>Pending</option>
-      <option value="processing" ${S.filterStatus==='processing'?'selected':''}>Processing</option>
-      <option value="completed" ${S.filterStatus==='completed'?'selected':''}>Completed</option>
-    </select></div>`;
-  if (!data.jobs.length) return h + '<div class="empty">No jobs</div>';
-  h += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job ID</th><th>Agent</th><th>Queue</th><th>Status</th><th>Priority</th><th>Payload</th><th class="hide-mobile">Created</th></tr></thead><tbody>';
-  for (const j of data.jobs) {
-    h += `<tr>
-      <td class="mono" style="color:var(--accent)">${esc(shortId(j.job_id))}</td>
-      <td class="mono">${esc(shortId(j.agent_id))}</td>
-      <td class="mono">${esc(j.queue_name)}</td>
-      <td>${statusBadge(j.status)}</td>
-      <td class="mono">${j.priority}</td>
-      <td class="payload-cell"><span class="payload-preview" onclick="viewPayload('Job ${esc(shortId(j.job_id))}',${JSON.stringify(JSON.stringify(j.payload))})">${esc(preview(j.payload))}</span></td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(j.created_at)}</td>
+  if(!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
+  _cache.queue = data.jobs;
+  let h = `<div class="filter-bar">${agentSel()}<select onchange="S.filterStatus=this.value;pageOffsets.queue=0;loadTab('queue')"><option value="">All statuses</option><option value="pending"${S.filterStatus==='pending'?' selected':''}>Pending</option><option value="processing"${S.filterStatus==='processing'?' selected':''}>Processing</option><option value="completed"${S.filterStatus==='completed'?' selected':''}>Completed</option></select></div>`;
+  if(!data.jobs.length) return h+'<div class="empty">No jobs</div>';
+  h += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Job ID</th><th>Agent</th><th>Queue</th><th>Status</th><th>Pri</th><th>Payload</th><th class="hide-mobile">Created</th></tr></thead><tbody>';
+  data.jobs.forEach((j,i) => {
+    h += `<tr class="clickable-row" onclick="viewJob(${i})">
+      <td class="id-cell">${e(short(j.job_id))}</td><td class="mono">${e(short(j.agent_id))}</td><td class="mono">${e(j.queue_name)}</td>
+      <td>${sBadge(j.status)}</td><td class="mono">${j.priority}</td>
+      <td><span class="payload-preview">${e(pre(j.payload))}</span></td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(j.created_at)}</td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>' + paginator(data,'queue');
+  });
+  return h+'</tbody></table></div>'+pager(data,'queue');
 }
 
 function renderWebhooks() {
   const data = S.webhooks;
-  if (!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
-  if (!data.webhooks.length) return '<div class="empty">No webhooks</div>';
+  if(!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
+  _cache.webhooks = data.webhooks;
+  if(!data.webhooks.length) return '<div class="empty">No webhooks</div>';
   let h = '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Agent</th><th>URL</th><th>Events</th><th>Active</th><th class="hide-mobile">Created</th></tr></thead><tbody>';
-  for (const w of data.webhooks) {
-    h += `<tr>
-      <td class="mono" style="color:var(--accent)">${esc(shortId(w.webhook_id))}</td>
-      <td class="mono">${esc(shortId(w.agent_id))}</td>
-      <td class="mono" style="max-width:250px;overflow:hidden;text-overflow:ellipsis">${esc(w.url)}</td>
-      <td>${(w.event_types||[]).map(e=>'<span class="badge badge-blue">'+esc(e)+'</span> ').join('')}</td>
+  data.webhooks.forEach((w,i) => {
+    h += `<tr class="clickable-row" onclick="viewWebhook(${i})">
+      <td class="id-cell">${e(short(w.webhook_id))}</td><td class="mono">${e(short(w.agent_id))}</td>
+      <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${e(w.url)}</td>
+      <td>${(w.event_types||[]).map(t=>'<span class="badge badge-blue">'+e(t)+'</span> ').join('')}</td>
       <td>${w.active?'<span class="badge badge-green">yes</span>':'<span class="badge badge-dim">no</span>'}</td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(w.created_at)}</td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(w.created_at)}</td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>';
+  });
+  return h+'</tbody></table></div>';
 }
 
 function renderSchedules() {
   const data = S.schedules;
-  if (!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
-  if (!data.schedules.length) return '<div class="empty">No scheduled tasks</div>';
+  if(!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
+  _cache.schedules = data.schedules;
+  if(!data.schedules.length) return '<div class="empty">No scheduled tasks</div>';
   let h = '<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Agent</th><th>Cron</th><th>Queue</th><th>Enabled</th><th>Runs</th><th class="hide-mobile">Next Run</th></tr></thead><tbody>';
-  for (const s of data.schedules) {
-    h += `<tr>
-      <td class="mono" style="color:var(--accent)">${esc(shortId(s.task_id))}</td>
-      <td class="mono">${esc(shortId(s.agent_id))}</td>
-      <td class="mono">${esc(s.cron_expr)}</td>
-      <td class="mono">${esc(s.queue_name)}</td>
+  data.schedules.forEach((s,i) => {
+    h += `<tr class="clickable-row" onclick="viewSchedule(${i})">
+      <td class="id-cell">${e(short(s.task_id))}</td><td class="mono">${e(short(s.agent_id))}</td>
+      <td class="mono">${e(s.cron_expr)}</td><td class="mono">${e(s.queue_name)}</td>
       <td>${s.enabled?'<span class="badge badge-green">yes</span>':'<span class="badge badge-dim">no</span>'}</td>
       <td class="mono">${s.run_count||0}</td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(s.next_run_at)}</td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(s.next_run_at)}</td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>';
+  });
+  return h+'</tbody></table></div>';
 }
 
 function renderShared() {
   const data = S.shared;
-  if (!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
-  let h = '<div class="filter-bar"><input placeholder="Filter namespace..." value="'+(S.filterNamespace||'')+'" onchange="S.filterNamespace=this.value;pageOffsets.shared=0;loadTab(\'shared\')"></div>';
-  if (!data.entries.length) return h + '<div class="empty">No shared memory entries</div>';
+  if(!data) return '<div class="loading"><div class="spinner"></div>Loading...</div>';
+  _cache.shared = data.entries;
+  let h = `<div class="filter-bar"><input placeholder="Filter namespace\u2026" value="${e(S.filterNamespace)}" onchange="S.filterNamespace=this.value;pageOffsets.shared=0;loadTab('shared')"></div>`;
+  if(!data.entries.length) return h+'<div class="empty">No shared memory entries</div>';
   h += '<div class="table-wrap"><table class="data-table"><thead><tr><th>Owner</th><th>Namespace</th><th>Key</th><th>Value</th><th class="hide-mobile">Description</th><th class="hide-mobile">Updated</th></tr></thead><tbody>';
-  for (const e of data.entries) {
-    h += `<tr>
-      <td class="mono" style="color:var(--accent)">${esc(shortId(e.owner_agent))}</td>
-      <td class="mono">${esc(e.namespace)}</td>
-      <td class="mono">${esc(e.key)}</td>
-      <td class="payload-cell"><span class="payload-preview" onclick="viewPayload('Shared: ${esc(e.namespace)}/${esc(e.key)}',${JSON.stringify(JSON.stringify(e.value))})">${esc(preview(e.value))}</span></td>
-      <td class="hide-mobile" style="color:var(--text-dim);font-size:0.75rem">${esc(preview(e.description,40))}</td>
-      <td class="hide-mobile mono" style="color:var(--text-dim)">${timeAgo(e.updated_at)}</td>
+  data.entries.forEach((x,i) => {
+    h += `<tr class="clickable-row" onclick="viewSharedEntry(${i})">
+      <td class="id-cell">${e(short(x.owner_agent))}</td><td class="mono">${e(x.namespace)}</td><td class="mono">${e(x.key)}</td>
+      <td><span class="payload-preview">${e(pre(x.value))}</span></td>
+      <td class="hide-mobile" style="color:var(--text-dim);font-size:0.75rem">${e(pre(x.description,40))}</td>
+      <td class="hide-mobile mono" style="color:var(--text-dim)">${ago(x.updated_at)}</td>
     </tr>`;
-  }
-  return h + '</tbody></table></div>' + paginator(data,'shared');
+  });
+  return h+'</tbody></table></div>'+pager(data,'shared');
 }
 
-// ── Actions ──
-function viewPayload(title, content) {
-  let pretty = content;
-  try { pretty = JSON.stringify(JSON.parse(content), null, 2); } catch(e) {}
-  document.getElementById('modalContent').innerHTML = `
-    <h3>${esc(title)}</h3>
-    <div class="modal-pre">${esc(pretty)}</div>
-    <div class="modal-actions"><button class="modal-close" onclick="closeModal()">Close</button></div>`;
+// ── Detail modals ──
+function openModal(headerHtml, bodyHtml, footerHtml) {
+  document.getElementById('modalInner').innerHTML = `
+    <div class="modal-header"><h3>${headerHtml}</h3><button class="modal-close-x" onclick="closeModal()">\u2715</button></div>
+    <div class="modal-body">${bodyHtml}</div>
+    ${footerHtml?`<div class="modal-footer">${footerHtml}</div>`:''}`;
   document.getElementById('modal').classList.add('active');
+}
+function closeModal() { document.getElementById('modal').classList.remove('active'); }
+
+function df(label,value,cls,full) { return `<div class="detail-field${full?' full':''}"><div class="detail-label">${label}</div><div class="detail-value ${cls||''}">${value}</div></div>`; }
+
+function viewMessage(i) {
+  const m = _cache.messages[i]; if(!m)return;
+  const body = `<div class="detail-grid">
+    ${df('Message ID',e(m.message_id),'accent')}${df('Channel',e(m.channel))}
+    ${df('From Agent',e(m.from_agent),'accent')}${df('To Agent',e(m.to_agent),'accent')}
+    ${df('Sent',m.created_at)}${df('Read',m.read_at||'Not yet read')}
+  </div>${df('Payload',e(pretty(m.payload)),'large',true)}`;
+  openModal('Message Detail', body);
+}
+
+function viewMemEntry(i) {
+  const m = _cache.memory[i]; if(!m)return;
+  const body = `<div class="detail-grid">
+    ${df('Agent',e(m.agent_id),'accent')}${df('Namespace',e(m.namespace))}
+    ${df('Key',e(m.key))}${df('Updated',m.updated_at)}
+    ${df('Created',m.created_at)}${df('Expires',m.expires_at||'Never')}
+  </div>${df('Value',e(pretty(m.value)),'large',true)}`;
+  openModal('Memory Entry', body);
+}
+
+function viewJob(i) {
+  const j = _cache.queue[i]; if(!j)return;
+  const body = `<div class="detail-grid">
+    ${df('Job ID',e(j.job_id),'accent')}${df('Agent',e(j.agent_id),'accent')}
+    ${df('Queue',e(j.queue_name))}${df('Status',sBadge(j.status))}
+    ${df('Priority',j.priority)}${df('Created',j.created_at)}
+    ${df('Started',j.started_at||'Not started')}${df('Completed',j.completed_at||'Not completed')}
+  </div>${df('Payload',e(pretty(j.payload)),'large',true)}
+  ${j.result?df('Result',e(pretty(j.result)),'large',true):''}`;
+  openModal('Job Detail', body);
+}
+
+function viewWebhook(i) {
+  const w = _cache.webhooks[i]; if(!w)return;
+  const body = `<div class="detail-grid">
+    ${df('Webhook ID',e(w.webhook_id),'accent')}${df('Agent',e(w.agent_id),'accent')}
+    ${df('URL',e(w.url),'',true)}
+    ${df('Events',(w.event_types||[]).map(t=>'<span class="badge badge-blue">'+e(t)+'</span> ').join(''))}
+    ${df('Active',w.active?'Yes':'No')}
+    ${df('Secret',w.secret?'Set (hidden)':'None')}${df('Created',w.created_at)}
+  </div>`;
+  openModal('Webhook Detail', body);
+}
+
+function viewSchedule(i) {
+  const s = _cache.schedules[i]; if(!s)return;
+  const body = `<div class="detail-grid">
+    ${df('Task ID',e(s.task_id),'accent')}${df('Agent',e(s.agent_id),'accent')}
+    ${df('Cron Expression',e(s.cron_expr))}${df('Queue',e(s.queue_name))}
+    ${df('Priority',s.priority)}${df('Enabled',s.enabled?'Yes':'No')}
+    ${df('Run Count',s.run_count||0)}${df('Created',s.created_at)}
+    ${df('Next Run',s.next_run_at||'N/A')}${df('Last Run',s.last_run_at||'Never')}
+  </div>${df('Payload',e(pretty(s.payload)),'large',true)}`;
+  openModal('Schedule Detail', body);
+}
+
+function viewSharedEntry(i) {
+  const x = _cache.shared[i]; if(!x)return;
+  const body = `<div class="detail-grid">
+    ${df('Owner Agent',e(x.owner_agent),'accent')}${df('Namespace',e(x.namespace))}
+    ${df('Key',e(x.key))}${df('Updated',x.updated_at)}
+    ${df('Created',x.created_at)}${df('Expires',x.expires_at||'Never')}
+    ${x.description?df('Description',e(x.description),'',true):''}
+  </div>${df('Value',e(pretty(x.value)),'large',true)}`;
+  openModal('Shared Memory Entry', body);
 }
 
 async function viewAgent(agentId) {
   const data = await api(`/admin/api/agents/${agentId}`);
-  if (!data) return;
+  if(!data) return;
   const a = data.agent;
-  let h = `<h3>Agent: ${esc(a.name||a.agent_id)}</h3><div class="modal-pre">${esc(JSON.stringify(a,null,2))}</div>`;
-  h += `<p class="mono" style="color:var(--text-dim);margin:0.5rem 0">Memory: ${data.memory.length} | Jobs: ${data.jobs.length} | Sent: ${data.messages_sent.length} | Received: ${data.messages_received.length} | Webhooks: ${data.webhooks.length} | Schedules: ${data.schedules.length} | Shared: ${data.shared_memory.length}</p>`;
-  if (data.messages_sent.length + data.messages_received.length > 0) {
-    h += '<h3 style="margin-top:1rem">Messages</h3><div class="modal-pre">';
-    for (const m of [...data.messages_sent,...data.messages_received].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,20)) {
-      const dir = m.from_agent === agentId ? '\u2192 ' + m.to_agent : '\u2190 ' + m.from_agent;
-      h += `${esc(m.created_at.slice(0,19))} [${esc(m.channel)}] ${esc(dir)}\n${esc(m.payload)}\n\n`;
+  let caps = '';
+  try { caps = JSON.parse(a.capabilities||'[]').join(', '); } catch(x) { caps = a.capabilities||''; }
+
+  let body = `<div class="detail-grid">
+    ${df('Agent ID',e(a.agent_id),'accent',true)}
+    ${df('Name',e(a.name)||'unnamed')}${df('Public',a.public?'Yes':'No')}
+    ${df('Created',a.created_at)}${df('Last Seen',a.last_seen||'Never')}
+    ${df('Total Requests',a.request_count||0)}${df('Capabilities',caps||'None')}
+    ${a.description?df('Description',e(a.description),'',true):''}
+  </div>`;
+
+  // Summary counts
+  body += `<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0">
+    <span class="badge badge-green">Memory: ${data.memory.length}</span>
+    <span class="badge badge-blue">Jobs: ${data.jobs.length}</span>
+    <span class="badge badge-blue">Sent: ${data.messages_sent.length}</span>
+    <span class="badge badge-blue">Received: ${data.messages_received.length}</span>
+    <span class="badge badge-green">Webhooks: ${data.webhooks.length}</span>
+    <span class="badge badge-green">Schedules: ${data.schedules.length}</span>
+    <span class="badge badge-green">Shared: ${data.shared_memory.length}</span>
+  </div>`;
+
+  // Messages
+  const allMsgs = [...data.messages_sent,...data.messages_received].sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  if (allMsgs.length) {
+    body += '<div style="margin-top:1rem"><div class="detail-label" style="margin-bottom:0.5rem">MESSAGES</div>';
+    for (const m of allMsgs.slice(0,25)) {
+      const dir = m.from_agent===agentId ? `\u2192 ${short(m.to_agent)}` : `\u2190 ${short(m.from_agent)}`;
+      body += `<div class="detail-field full" style="margin-bottom:0.5rem;cursor:pointer" onclick="_tmpMsg=${JSON.stringify(m).replace(/'/g,'\\u0027')};_showTmpMsg()">
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem">
+          <span class="mono" style="color:var(--accent);font-size:0.7rem">${e(dir)}</span>
+          <span class="mono" style="color:var(--text-dim);font-size:0.65rem">[${e(m.channel)}] ${ago(m.created_at)}</span>
+        </div>
+        <div class="mono" style="font-size:0.75rem">${e(pre(m.payload,200))}</div>
+      </div>`;
     }
-    h += '</div>';
+    body += '</div>';
   }
-  if (data.memory.length > 0) {
-    h += '<h3 style="margin-top:1rem">Memory</h3><div class="modal-pre">';
-    for (const e of data.memory) h += `[${esc(e.namespace)}] ${esc(e.key)} = ${esc(preview(e.value,200))}\n`;
-    h += '</div>';
+
+  // Memory
+  if (data.memory.length) {
+    body += '<div style="margin-top:1rem"><div class="detail-label" style="margin-bottom:0.5rem">MEMORY</div>';
+    for (const m of data.memory.slice(0,20)) {
+      body += `<div class="detail-field full" style="margin-bottom:0.5rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem">
+          <span class="mono" style="color:var(--accent);font-size:0.7rem">[${e(m.namespace)}] ${e(m.key)}</span>
+          <span class="mono" style="color:var(--text-dim);font-size:0.65rem">${ago(m.updated_at)}</span>
+        </div>
+        <div class="mono" style="font-size:0.75rem;word-break:break-all">${e(pre(m.value,300))}</div>
+      </div>`;
+    }
+    body += '</div>';
   }
-  h += `<div class="modal-actions"><button class="modal-close" onclick="closeModal()">Close</button>
-    <button class="modal-danger" onclick="confirmDeleteAgent('${esc(agentId)}');closeModal()">Delete Agent</button></div>`;
-  document.getElementById('modalContent').innerHTML = h;
-  document.getElementById('modal').classList.add('active');
+
+  const footer = `<button class="modal-btn modal-btn-default" onclick="closeModal()">Close</button>
+    <button class="modal-btn modal-btn-danger" onclick="confirmDel('${e(agentId)}')">Delete Agent</button>`;
+  openModal(`Agent: ${e(a.name||short(a.agent_id))}`, body, footer);
 }
 
-function confirmDeleteAgent(agentId) {
-  document.getElementById('modalContent').innerHTML = `
-    <h3>Delete Agent</h3>
-    <p style="color:var(--text-dim)">Permanently delete <span class="mono" style="color:var(--accent)">${esc(agentId)}</span> and all associated data?</p>
-    <div class="modal-actions">
-      <button class="modal-close" onclick="closeModal()">Cancel</button>
-      <button class="modal-danger" onclick="doDelete('${esc(agentId)}')">Delete</button>
-    </div>`;
-  document.getElementById('modal').classList.add('active');
-}
-
-async function doDelete(agentId) {
-  await apiDelete(`/admin/api/agents/${agentId}`);
+// Delete confirmation
+function confirmDel(agentId) {
   closeModal();
-  loadDashboard();
+  const body = `<p style="color:var(--text-dim);margin-bottom:1rem">Permanently delete <span class="mono" style="color:var(--accent)">${e(agentId)}</span> and ALL associated data (memory, jobs, messages, webhooks, schedules, shared memory)?</p>`;
+  const footer = `<button class="modal-btn modal-btn-default" onclick="closeModal()">Cancel</button><button class="modal-btn modal-btn-danger" onclick="doDel('${e(agentId)}')">Delete Forever</button>`;
+  openModal('Delete Agent', body, footer);
 }
-
-function closeModal() { document.getElementById('modal').classList.remove('active'); }
+async function doDel(id) { await fetch(`/admin/api/agents/${id}`,{method:'DELETE',credentials:'same-origin'}); closeModal(); loadDashboard(); }
 async function handleLogout() { await fetch('/admin/api/logout',{method:'POST',credentials:'same-origin'}); window.location.href='/admin/login'; }
 
 // ── Init ──
 loadDashboard();
-setInterval(() => { loadDashboard(); if (currentTab !== 'overview') loadTab(currentTab); }, 15000);
-document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+setInterval(loadDashboard, 15000);
+document.getElementById('modal').addEventListener('click', ev => { if(ev.target.id==='modal') closeModal(); });
 </script>
 </body>
 </html>
