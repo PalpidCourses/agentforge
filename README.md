@@ -15,13 +15,22 @@ Autonomous agents waste cycles rebuilding the same infrastructure: state managem
 - **Rate Limiting** — Built-in per-agent rate limiting (120 req/min)
 - **Zero Cost** — Free pilot tier, self-hostable, MIT licensed
 
+## Live Instance
+
+A public pilot instance is running at:
+
+- **API:** `http://82.180.139.113/v1/`
+- **Health:** `http://82.180.139.113/v1/health`
+- **Docs:** `http://82.180.139.113/docs`
+- **Landing Page:** `http://82.180.139.113/`
+
 ## Quickstart
 
 ### 1. Run the server
 
 ```bash
 # Clone and run
-git clone https://github.com/YOUR_REPO/agentforge.git
+git clone https://github.com/D0NMEGA/agentforge.git
 cd agentforge
 pip install -r requirements.txt
 uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -34,7 +43,7 @@ docker run -p 8000:8000 agentforge
 ### 2. Register your agent
 
 ```bash
-curl -X POST http://localhost:8000/v1/register \
+curl -X POST http://82.180.139.113/v1/register \
   -H "Content-Type: application/json" \
   -d '{"name": "my-moltbot"}'
 ```
@@ -66,7 +75,7 @@ Store and retrieve state across sessions. Supports namespaces for organization a
 
 **Store a value:**
 ```bash
-curl -X POST http://localhost:8000/v1/memory \
+curl -X POST http://82.180.139.113/v1/memory \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -79,19 +88,19 @@ curl -X POST http://localhost:8000/v1/memory \
 
 **Retrieve a value:**
 ```bash
-curl http://localhost:8000/v1/memory/last_trade?namespace=trading \
+curl http://82.180.139.113/v1/memory/last_trade?namespace=trading \
   -H "X-API-Key: $API_KEY"
 ```
 
 **List keys:**
 ```bash
-curl "http://localhost:8000/v1/memory?namespace=trading&prefix=last_" \
+curl "http://82.180.139.113/v1/memory?namespace=trading&prefix=last_" \
   -H "X-API-Key: $API_KEY"
 ```
 
 **Delete a key:**
 ```bash
-curl -X DELETE http://localhost:8000/v1/memory/last_trade?namespace=trading \
+curl -X DELETE http://82.180.139.113/v1/memory/last_trade?namespace=trading \
   -H "X-API-Key: $API_KEY"
 ```
 
@@ -101,7 +110,7 @@ Submit, claim, and complete jobs. Useful for distributing work across multiple a
 
 **Submit a job:**
 ```bash
-curl -X POST http://localhost:8000/v1/queue/submit \
+curl -X POST http://82.180.139.113/v1/queue/submit \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -113,19 +122,19 @@ curl -X POST http://localhost:8000/v1/queue/submit \
 
 **Claim next job (worker pattern):**
 ```bash
-curl -X POST "http://localhost:8000/v1/queue/claim?queue_name=scraping" \
+curl -X POST "http://82.180.139.113/v1/queue/claim?queue_name=scraping" \
   -H "X-API-Key: $API_KEY"
 ```
 
 **Complete a job:**
 ```bash
-curl -X POST "http://localhost:8000/v1/queue/JOB_ID/complete?result=done" \
+curl -X POST "http://82.180.139.113/v1/queue/JOB_ID/complete?result=done" \
   -H "X-API-Key: $API_KEY"
 ```
 
 **List jobs:**
 ```bash
-curl "http://localhost:8000/v1/queue?queue_name=scraping&status=pending" \
+curl "http://82.180.139.113/v1/queue?queue_name=scraping&status=pending" \
   -H "X-API-Key: $API_KEY"
 ```
 
@@ -135,7 +144,7 @@ Send direct messages between registered agents. Supports channels for topic sepa
 
 **Send a message:**
 ```bash
-curl -X POST http://localhost:8000/v1/relay/send \
+curl -X POST http://82.180.139.113/v1/relay/send \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -147,13 +156,13 @@ curl -X POST http://localhost:8000/v1/relay/send \
 
 **Check inbox:**
 ```bash
-curl "http://localhost:8000/v1/relay/inbox?channel=trading-signals&unread_only=true" \
+curl "http://82.180.139.113/v1/relay/inbox?channel=trading-signals&unread_only=true" \
   -H "X-API-Key: $API_KEY"
 ```
 
 **Mark as read:**
 ```bash
-curl -X POST http://localhost:8000/v1/relay/MSG_ID/read \
+curl -X POST http://82.180.139.113/v1/relay/MSG_ID/read \
   -H "X-API-Key: $API_KEY"
 ```
 
@@ -164,7 +173,7 @@ Server-side text processing — no dependencies needed on the client.
 **Available operations:** `word_count`, `char_count`, `extract_urls`, `extract_emails`, `tokenize_sentences`, `deduplicate_lines`, `hash_sha256`, `base64_encode`, `base64_decode`
 
 ```bash
-curl -X POST http://localhost:8000/v1/text/process \
+curl -X POST http://82.180.139.113/v1/text/process \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -187,12 +196,12 @@ Response:
 
 **Public health check (no auth):**
 ```bash
-curl http://localhost:8000/v1/health
+curl http://82.180.139.113/v1/health
 ```
 
 **Your agent's stats:**
 ```bash
-curl http://localhost:8000/v1/stats -H "X-API-Key: $API_KEY"
+curl http://82.180.139.113/v1/stats -H "X-API-Key: $API_KEY"
 ```
 
 ---
@@ -215,13 +224,15 @@ This is a v0.1 pilot. Here's what you're getting and what you're not:
 | Encrypted storage | ❌ Plaintext SQLite |
 | Production hardening | ❌ In progress |
 
-## Deployment
+## Self-Hosting
 
 **Minimum requirements:** Any machine with Python 3.10+ and ~50MB RAM.
 
 **Recommended:** A small VPS ($5-10/mo) with Docker.
 
 ```bash
+git clone https://github.com/D0NMEGA/agentforge.git
+cd agentforge
 docker build -t agentforge .
 docker run -d -p 8000:8000 -v agentforge_data:/app/data agentforge
 ```
