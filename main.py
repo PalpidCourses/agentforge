@@ -36,9 +36,7 @@ RATE_LIMIT_MAX = 120  # requests per window per agent
 
 # Admin auth: load password hash from env (set on VPS only, never in code)
 ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
-ADMIN_SESSION_SECRET = os.getenv("ADMIN_SESSION_SECRET", secrets.token_hex(32))
-_admin_sessions: dict[str, float] = {}  # token -> expiry timestamp
-ADMIN_SESSION_TTL = 3600 * 4  # 4 hours
+ADMIN_SESSION_TTL = 3600 * 24  # 24 hours
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -176,6 +174,11 @@ def init_db():
             FOREIGN KEY (owner_agent) REFERENCES agents(agent_id)
         );
         CREATE INDEX IF NOT EXISTS idx_shared_ns ON shared_memory(namespace);
+
+        CREATE TABLE IF NOT EXISTS admin_sessions (
+            token TEXT PRIMARY KEY,
+            expires_at REAL NOT NULL
+        );
     """)
 
     # Migrate existing agents table — add columns that v0.1.0 didn't have
@@ -1081,12 +1084,18 @@ async def relay_websocket(ws: WebSocket):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _verify_admin_session(admin_token: str = Cookie(None)) -> bool:
-    """Verify admin session cookie is valid and not expired."""
-    if not admin_token or admin_token not in _admin_sessions:
+    """Verify admin session cookie via SQLite (works across workers)."""
+    if not admin_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if time.time() > _admin_sessions[admin_token]:
-        del _admin_sessions[admin_token]
-        raise HTTPException(status_code=401, detail="Session expired")
+    with get_db() as db:
+        row = db.execute(
+            "SELECT expires_at FROM admin_sessions WHERE token=?", (admin_token,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        if time.time() > row["expires_at"]:
+            db.execute("DELETE FROM admin_sessions WHERE token=?", (admin_token,))
+            raise HTTPException(status_code=401, detail="Session expired")
     return True
 
 class AdminLoginRequest(BaseModel):
@@ -1101,18 +1110,23 @@ def admin_login(req: AdminLoginRequest, response: Response):
     if not _hmac.compare_digest(incoming_hash, ADMIN_PASSWORD_HASH):
         raise HTTPException(401, "Invalid password")
     token = secrets.token_urlsafe(48)
-    _admin_sessions[token] = time.time() + ADMIN_SESSION_TTL
+    expires_at = time.time() + ADMIN_SESSION_TTL
+    with get_db() as db:
+        # Clean up expired sessions
+        db.execute("DELETE FROM admin_sessions WHERE expires_at < ?", (time.time(),))
+        db.execute("INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)", (token, expires_at))
     response.set_cookie(
         key="admin_token", value=token, httponly=True,
-        max_age=ADMIN_SESSION_TTL, samesite="strict", path="/",
+        max_age=ADMIN_SESSION_TTL, samesite="lax", path="/",
     )
     return {"status": "authenticated"}
 
 @app.post("/admin/api/logout", tags=["Admin"])
 def admin_logout(response: Response, admin_token: str = Cookie(None)):
     """Log out admin session."""
-    if admin_token and admin_token in _admin_sessions:
-        del _admin_sessions[admin_token]
+    if admin_token:
+        with get_db() as db:
+            db.execute("DELETE FROM admin_sessions WHERE token=?", (admin_token,))
     response.delete_cookie("admin_token", path="/")
     return {"status": "logged_out"}
 
@@ -1121,7 +1135,7 @@ def admin_dashboard(_: bool = Depends(_verify_admin_session)):
     """Admin dashboard data: full system overview."""
     with get_db() as db:
         agents = db.execute(
-            "SELECT agent_id, name, description, public, created_at, last_seen, request_count "
+            "SELECT agent_id, name, description, capabilities, public, created_at, last_seen, request_count "
             "FROM agents ORDER BY created_at DESC"
         ).fetchall()
         agent_count = len(agents)
@@ -1154,6 +1168,139 @@ def admin_dashboard(_: bool = Depends(_verify_admin_session)):
         },
         "version": "0.3.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+@app.get("/admin/api/messages", tags=["Admin"])
+def admin_messages(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    agent_id: Optional[str] = None,
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all relay messages."""
+    with get_db() as db:
+        if agent_id:
+            rows = db.execute(
+                "SELECT * FROM relay WHERE from_agent=? OR to_agent=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (agent_id, agent_id, limit, offset)
+            ).fetchall()
+            total = db.execute(
+                "SELECT COUNT(*) as c FROM relay WHERE from_agent=? OR to_agent=?", (agent_id, agent_id)
+            ).fetchone()["c"]
+        else:
+            rows = db.execute(
+                "SELECT * FROM relay ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM relay").fetchone()["c"]
+    return {"messages": [dict(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+@app.get("/admin/api/memory", tags=["Admin"])
+def admin_memory(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    agent_id: Optional[str] = None,
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all agent memory entries."""
+    with get_db() as db:
+        if agent_id:
+            rows = db.execute(
+                "SELECT * FROM memory WHERE agent_id=? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (agent_id, limit, offset)
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM memory WHERE agent_id=?", (agent_id,)).fetchone()["c"]
+        else:
+            rows = db.execute(
+                "SELECT * FROM memory ORDER BY updated_at DESC LIMIT ? OFFSET ?", (limit, offset)
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM memory").fetchone()["c"]
+    return {"entries": [dict(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+@app.get("/admin/api/queue", tags=["Admin"])
+def admin_queue(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all queue jobs."""
+    with get_db() as db:
+        conditions = []
+        params = []
+        if status:
+            conditions.append("status=?")
+            params.append(status)
+        if agent_id:
+            conditions.append("agent_id=?")
+            params.append(agent_id)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = db.execute(
+            f"SELECT * FROM queue {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset]
+        ).fetchall()
+        total = db.execute(f"SELECT COUNT(*) as c FROM queue {where}", params).fetchone()["c"]
+    return {"jobs": [dict(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+@app.get("/admin/api/webhooks", tags=["Admin"])
+def admin_webhooks(_: bool = Depends(_verify_admin_session)):
+    """Browse all registered webhooks."""
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM webhooks ORDER BY created_at DESC").fetchall()
+    return {"webhooks": [{**dict(r), "event_types": json.loads(r["event_types"])} for r in rows], "total": len(rows)}
+
+@app.get("/admin/api/schedules", tags=["Admin"])
+def admin_schedules(_: bool = Depends(_verify_admin_session)):
+    """Browse all scheduled tasks."""
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM scheduled_tasks ORDER BY created_at DESC").fetchall()
+    return {"schedules": [dict(r) for r in rows], "total": len(rows)}
+
+@app.get("/admin/api/shared-memory", tags=["Admin"])
+def admin_shared_memory(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    namespace: Optional[str] = None,
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all shared memory entries."""
+    with get_db() as db:
+        if namespace:
+            rows = db.execute(
+                "SELECT * FROM shared_memory WHERE namespace=? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (namespace, limit, offset)
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM shared_memory WHERE namespace=?", (namespace,)).fetchone()["c"]
+        else:
+            rows = db.execute(
+                "SELECT * FROM shared_memory ORDER BY updated_at DESC LIMIT ? OFFSET ?", (limit, offset)
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM shared_memory").fetchone()["c"]
+    return {"entries": [dict(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+@app.get("/admin/api/agents/{agent_id}", tags=["Admin"])
+def admin_agent_detail(agent_id: str, _: bool = Depends(_verify_admin_session)):
+    """Get full detail for a single agent including all their data."""
+    with get_db() as db:
+        agent = db.execute("SELECT * FROM agents WHERE agent_id=?", (agent_id,)).fetchone()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        memory = db.execute("SELECT * FROM memory WHERE agent_id=? ORDER BY updated_at DESC LIMIT 100", (agent_id,)).fetchall()
+        jobs = db.execute("SELECT * FROM queue WHERE agent_id=? ORDER BY created_at DESC LIMIT 100", (agent_id,)).fetchall()
+        sent = db.execute("SELECT * FROM relay WHERE from_agent=? ORDER BY created_at DESC LIMIT 100", (agent_id,)).fetchall()
+        received = db.execute("SELECT * FROM relay WHERE to_agent=? ORDER BY created_at DESC LIMIT 100", (agent_id,)).fetchall()
+        wh = db.execute("SELECT * FROM webhooks WHERE agent_id=?", (agent_id,)).fetchall()
+        sched = db.execute("SELECT * FROM scheduled_tasks WHERE agent_id=?", (agent_id,)).fetchall()
+        shared = db.execute("SELECT * FROM shared_memory WHERE owner_agent=? ORDER BY updated_at DESC LIMIT 100", (agent_id,)).fetchall()
+    return {
+        "agent": dict(agent),
+        "memory": [dict(r) for r in memory],
+        "jobs": [dict(r) for r in jobs],
+        "messages_sent": [dict(r) for r in sent],
+        "messages_received": [dict(r) for r in received],
+        "webhooks": [{**dict(r), "event_types": json.loads(r["event_types"])} for r in wh],
+        "schedules": [dict(r) for r in sched],
+        "shared_memory": [dict(r) for r in shared],
     }
 
 @app.delete("/admin/api/agents/{agent_id}", tags=["Admin"])
