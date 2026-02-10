@@ -7,10 +7,12 @@ import os
 import json
 import time
 import uuid
+import random
 import hashlib
 import sqlite3
 import asyncio
 import logging
+import statistics
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -57,7 +59,7 @@ app = FastAPI(
     title="AgentForge",
     description="Open-source toolkit API for autonomous agents. "
     "Persistent memory, task queues, message relay, and text utilities.",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -193,11 +195,71 @@ def init_db():
             response_ms REAL NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_uptime_at ON uptime_checks(checked_at);
+
+        CREATE TABLE IF NOT EXISTS collaborations (
+            collaboration_id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            partner_agent TEXT NOT NULL,
+            task_type TEXT,
+            outcome TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (agent_id) REFERENCES agents(agent_id),
+            FOREIGN KEY (partner_agent) REFERENCES agents(agent_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_collab_partner ON collaborations(partner_agent);
+        CREATE INDEX IF NOT EXISTS idx_collab_agent ON collaborations(agent_id);
+
+        CREATE TABLE IF NOT EXISTS marketplace (
+            task_id TEXT PRIMARY KEY,
+            creator_agent TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            category TEXT,
+            requirements TEXT,
+            reward_credits INTEGER DEFAULT 0,
+            priority INTEGER DEFAULT 0,
+            estimated_effort TEXT,
+            tags TEXT,
+            deadline TEXT,
+            status TEXT DEFAULT 'open',
+            claimed_by TEXT,
+            claimed_at TEXT,
+            delivered_at TEXT,
+            result TEXT,
+            rating INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (creator_agent) REFERENCES agents(agent_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_market_status ON marketplace(status, category);
+        CREATE INDEX IF NOT EXISTS idx_market_creator ON marketplace(creator_agent);
+        CREATE INDEX IF NOT EXISTS idx_market_claimed ON marketplace(claimed_by);
+
+        CREATE TABLE IF NOT EXISTS test_scenarios (
+            scenario_id TEXT PRIMARY KEY,
+            creator_agent TEXT NOT NULL,
+            name TEXT,
+            pattern TEXT NOT NULL,
+            agent_count INTEGER NOT NULL,
+            timeout_seconds INTEGER DEFAULT 60,
+            success_criteria TEXT,
+            status TEXT DEFAULT 'created',
+            results TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (creator_agent) REFERENCES agents(agent_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_scenarios_creator ON test_scenarios(creator_agent);
     """)
 
-    # Migrate existing agents table — add columns that v0.1.0 didn't have
+    # Migrate existing agents table — add columns that older versions didn't have
     existing = {row[1] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
-    for col, typedef in [("description", "TEXT"), ("capabilities", "TEXT"), ("public", "INTEGER DEFAULT 0")]:
+    for col, typedef in [
+        ("description", "TEXT"), ("capabilities", "TEXT"), ("public", "INTEGER DEFAULT 0"),
+        ("available", "INTEGER DEFAULT 1"), ("looking_for", "TEXT"), ("busy_until", "TEXT"),
+        ("reputation", "REAL DEFAULT 0.0"), ("reputation_count", "INTEGER DEFAULT 0"),
+        ("credits", "INTEGER DEFAULT 0"),
+    ]:
         if col not in existing:
             conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {typedef}")
 
@@ -661,7 +723,7 @@ def text_process(req: TextProcessRequest, agent_id: str = Depends(get_agent_id))
 # WEBHOOK CALLBACKS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-WEBHOOK_EVENT_TYPES = {"message.received", "job.completed"}
+WEBHOOK_EVENT_TYPES = {"message.received", "job.completed", "marketplace.task.claimed", "marketplace.task.delivered", "marketplace.task.completed"}
 WEBHOOK_TIMEOUT = 5.0  # seconds
 
 class WebhookRegisterRequest(BaseModel):
@@ -1049,12 +1111,15 @@ def directory_me(agent_id: str = Depends(get_agent_id)):
     """Get your own directory profile."""
     with get_db() as db:
         row = db.execute(
-            "SELECT agent_id, name, description, capabilities, public, created_at FROM agents WHERE agent_id=?",
+            "SELECT agent_id, name, description, capabilities, public, available, looking_for, "
+            "busy_until, reputation, reputation_count, credits, created_at FROM agents WHERE agent_id=?",
             (agent_id,)
         ).fetchone()
     d = dict(row)
     d["capabilities"] = json.loads(d["capabilities"]) if d["capabilities"] else []
+    d["looking_for"] = json.loads(d["looking_for"]) if d["looking_for"] else []
     d["public"] = bool(d["public"])
+    d["available"] = bool(d.get("available", 1))
     return d
 
 @app.get("/v1/directory", tags=["Directory"])
@@ -1063,16 +1128,17 @@ def directory_list(
     limit: int = Query(50, le=200),
 ):
     """Browse the public agent directory. No auth required."""
+    cols = "agent_id, name, description, capabilities, available, reputation, credits, created_at"
     with get_db() as db:
         if capability:
             rows = db.execute(
-                "SELECT agent_id, name, description, capabilities, created_at FROM agents "
+                f"SELECT {cols} FROM agents "
                 "WHERE public=1 AND capabilities LIKE ? ORDER BY created_at DESC LIMIT ?",
                 (f"%{capability}%", limit)
             ).fetchall()
         else:
             rows = db.execute(
-                "SELECT agent_id, name, description, capabilities, created_at FROM agents "
+                f"SELECT {cols} FROM agents "
                 "WHERE public=1 ORDER BY created_at DESC LIMIT ?",
                 (limit,)
             ).fetchall()
@@ -1080,8 +1146,527 @@ def directory_list(
     for r in rows:
         d = dict(r)
         d["capabilities"] = json.loads(d["capabilities"]) if d["capabilities"] else []
+        d["available"] = bool(d.get("available", 1))
         agents.append(d)
     return {"agents": agents, "count": len(agents)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENHANCED DISCOVERY (Search, Status, Collaborations, Matchmaking)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class StatusUpdateRequest(BaseModel):
+    available: Optional[bool] = Field(None, description="Whether agent is available for work")
+    looking_for: Optional[List[str]] = Field(None, description="Capabilities this agent is seeking")
+    busy_until: Optional[str] = Field(None, description="ISO timestamp when agent becomes free")
+
+class CollaborationRequest(BaseModel):
+    partner_agent: str = Field(..., description="Agent ID of the collaboration partner")
+    task_type: Optional[str] = Field(None, max_length=128)
+    outcome: str = Field(..., description="success, failure, or partial")
+    rating: int = Field(..., ge=1, le=5, description="Rating 1-5 for the partner")
+
+@app.get("/v1/directory/search", tags=["Directory"])
+def directory_search(
+    capability: Optional[str] = None,
+    available: Optional[bool] = None,
+    min_reputation: float = Query(0.0, ge=0.0),
+    limit: int = Query(50, le=200),
+):
+    """Search the agent directory with filters. No auth required."""
+    now = datetime.now(timezone.utc).isoformat()
+    conditions = ["public=1"]
+    params: list = []
+    if capability:
+        conditions.append("capabilities LIKE ?")
+        params.append(f"%{capability}%")
+    if available is True:
+        conditions.append("available=1 AND (busy_until IS NULL OR busy_until < ?)")
+        params.append(now)
+    if min_reputation > 0:
+        conditions.append("reputation >= ?")
+        params.append(min_reputation)
+    where = " AND ".join(conditions)
+    params.append(limit)
+    cols = "agent_id, name, description, capabilities, available, looking_for, busy_until, reputation, credits, created_at"
+    with get_db() as db:
+        rows = db.execute(
+            f"SELECT {cols} FROM agents WHERE {where} ORDER BY reputation DESC, created_at DESC LIMIT ?",
+            params
+        ).fetchall()
+    agents = []
+    for r in rows:
+        d = dict(r)
+        d["capabilities"] = json.loads(d["capabilities"]) if d["capabilities"] else []
+        d["looking_for"] = json.loads(d["looking_for"]) if d["looking_for"] else []
+        d["available"] = bool(d.get("available", 1))
+        agents.append(d)
+    return {"agents": agents, "count": len(agents)}
+
+@app.patch("/v1/directory/me/status", tags=["Directory"])
+def directory_status_update(req: StatusUpdateRequest, agent_id: str = Depends(get_agent_id)):
+    """Update your availability status."""
+    updates = []
+    params: list = []
+    if req.available is not None:
+        updates.append("available=?")
+        params.append(int(req.available))
+    if req.looking_for is not None:
+        updates.append("looking_for=?")
+        params.append(json.dumps(req.looking_for))
+    if req.busy_until is not None:
+        updates.append("busy_until=?")
+        params.append(req.busy_until)
+        if req.available is None:
+            updates.append("available=0")
+    if not updates:
+        raise HTTPException(400, "No fields to update")
+    params.append(agent_id)
+    with get_db() as db:
+        db.execute(f"UPDATE agents SET {', '.join(updates)} WHERE agent_id=?", params)
+    return {"status": "updated", "agent_id": agent_id}
+
+@app.post("/v1/directory/collaborations", tags=["Directory"])
+def log_collaboration(req: CollaborationRequest, agent_id: str = Depends(get_agent_id)):
+    """Log a collaboration outcome. Updates the partner's reputation."""
+    if req.outcome not in ("success", "failure", "partial"):
+        raise HTTPException(400, "outcome must be: success, failure, or partial")
+    if req.partner_agent == agent_id:
+        raise HTTPException(400, "Cannot rate yourself")
+    collab_id = f"collab_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        partner = db.execute(
+            "SELECT reputation, reputation_count FROM agents WHERE agent_id=?", (req.partner_agent,)
+        ).fetchone()
+        if not partner:
+            raise HTTPException(404, "Partner agent not found")
+        db.execute(
+            "INSERT INTO collaborations (collaboration_id, agent_id, partner_agent, task_type, outcome, rating, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (collab_id, agent_id, req.partner_agent, _encrypt(req.task_type) if req.task_type else None,
+             req.outcome, req.rating, now)
+        )
+        new_count = (partner["reputation_count"] or 0) + 1
+        old_rep = partner["reputation"] or 0.0
+        new_rep = round(((old_rep * (new_count - 1)) + req.rating) / new_count, 2)
+        db.execute(
+            "UPDATE agents SET reputation=?, reputation_count=? WHERE agent_id=?",
+            (new_rep, new_count, req.partner_agent)
+        )
+    return {
+        "collaboration_id": collab_id, "agent_id": agent_id, "partner_agent": req.partner_agent,
+        "task_type": req.task_type, "outcome": req.outcome, "rating": req.rating,
+        "partner_new_reputation": new_rep, "created_at": now,
+    }
+
+@app.get("/v1/directory/match", tags=["Directory"])
+def directory_match(
+    need: str = Query(..., description="Capability you're looking for"),
+    min_reputation: float = Query(0.0, ge=0.0),
+    limit: int = Query(10, le=50),
+    agent_id: str = Depends(get_agent_id),
+):
+    """Find agents that match your needs. Excludes yourself."""
+    now = datetime.now(timezone.utc).isoformat()
+    cols = "agent_id, name, description, capabilities, available, looking_for, reputation, credits, created_at"
+    with get_db() as db:
+        rows = db.execute(
+            f"SELECT {cols} FROM agents WHERE public=1 AND available=1 AND capabilities LIKE ? "
+            "AND (busy_until IS NULL OR busy_until < ?) AND reputation >= ? AND agent_id != ? "
+            "ORDER BY reputation DESC LIMIT ?",
+            (f"%{need}%", now, min_reputation, agent_id, limit)
+        ).fetchall()
+    matches = []
+    for r in rows:
+        d = dict(r)
+        d["capabilities"] = json.loads(d["capabilities"]) if d["capabilities"] else []
+        d["looking_for"] = json.loads(d["looking_for"]) if d["looking_for"] else []
+        d["available"] = bool(d.get("available", 1))
+        matches.append(d)
+    return {"matches": matches, "count": len(matches), "need": need}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TASK MARKETPLACE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MARKETPLACE_STATUSES = {"open", "claimed", "delivered", "completed", "expired"}
+
+class MarketplaceCreateRequest(BaseModel):
+    title: str = Field(..., max_length=256)
+    description: Optional[str] = Field(None, max_length=5000)
+    category: Optional[str] = Field(None, max_length=64)
+    requirements: Optional[List[str]] = Field(None, description="Required capabilities")
+    reward_credits: int = Field(0, ge=0, le=10000)
+    priority: int = Field(0, ge=0, le=10)
+    estimated_effort: Optional[str] = Field(None, max_length=128)
+    tags: Optional[List[str]] = Field(None)
+    deadline: Optional[str] = Field(None, description="ISO timestamp deadline")
+
+class MarketplaceDeliverRequest(BaseModel):
+    result: str = Field(..., max_length=50000)
+
+class MarketplaceReviewRequest(BaseModel):
+    accept: bool = Field(...)
+    rating: Optional[int] = Field(None, ge=1, le=5)
+
+def _expire_marketplace_tasks(db):
+    """Lazy expiration: mark past-deadline open tasks as expired."""
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute("UPDATE marketplace SET status='expired' WHERE status='open' AND deadline IS NOT NULL AND deadline < ?", (now,))
+
+def _parse_marketplace_row(row):
+    d = dict(row)
+    d["requirements"] = json.loads(d["requirements"]) if d["requirements"] else []
+    d["tags"] = json.loads(d["tags"]) if d["tags"] else []
+    if d.get("description"):
+        d["description"] = _decrypt(d["description"])
+    if d.get("result"):
+        d["result"] = _decrypt(d["result"])
+    return d
+
+@app.post("/v1/marketplace/tasks", tags=["Marketplace"])
+def marketplace_create(req: MarketplaceCreateRequest, agent_id: str = Depends(get_agent_id)):
+    """Post a task to the marketplace for other agents to claim."""
+    task_id = f"mktask_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO marketplace (task_id, creator_agent, title, description, category, requirements, "
+            "reward_credits, priority, estimated_effort, tags, deadline, status, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (task_id, agent_id, req.title,
+             _encrypt(req.description) if req.description else None,
+             req.category,
+             json.dumps(req.requirements) if req.requirements else None,
+             req.reward_credits, req.priority, req.estimated_effort,
+             json.dumps(req.tags) if req.tags else None,
+             req.deadline, "open", now)
+        )
+    return {"task_id": task_id, "status": "open", "created_at": now}
+
+@app.get("/v1/marketplace/tasks", tags=["Marketplace"])
+def marketplace_browse(
+    category: Optional[str] = None,
+    status: str = Query("open"),
+    tag: Optional[str] = None,
+    min_reward: int = Query(0, ge=0),
+    limit: int = Query(50, le=200),
+):
+    """Browse marketplace tasks. No auth required."""
+    conditions = ["status=?"]
+    params: list = [status]
+    if category:
+        conditions.append("category=?")
+        params.append(category)
+    if tag:
+        conditions.append("tags LIKE ?")
+        params.append(f"%{tag}%")
+    if min_reward > 0:
+        conditions.append("reward_credits >= ?")
+        params.append(min_reward)
+    where = " AND ".join(conditions)
+    params.append(limit)
+    with get_db() as db:
+        _expire_marketplace_tasks(db)
+        rows = db.execute(
+            f"SELECT * FROM marketplace WHERE {where} ORDER BY priority DESC, created_at DESC LIMIT ?",
+            params
+        ).fetchall()
+    return {"tasks": [_parse_marketplace_row(r) for r in rows], "count": len(rows)}
+
+@app.get("/v1/marketplace/tasks/{task_id}", tags=["Marketplace"])
+def marketplace_detail(task_id: str):
+    """Get marketplace task details. No auth required."""
+    with get_db() as db:
+        row = db.execute("SELECT * FROM marketplace WHERE task_id=?", (task_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Task not found")
+    return _parse_marketplace_row(row)
+
+@app.post("/v1/marketplace/tasks/{task_id}/claim", tags=["Marketplace"])
+def marketplace_claim(task_id: str, agent_id: str = Depends(get_agent_id)):
+    """Claim an open marketplace task."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        _expire_marketplace_tasks(db)
+        task = db.execute("SELECT * FROM marketplace WHERE task_id=?", (task_id,)).fetchone()
+        if not task:
+            raise HTTPException(404, "Task not found")
+        if task["status"] != "open":
+            raise HTTPException(409, f"Task is not open (status: {task['status']})")
+        if task["creator_agent"] == agent_id:
+            raise HTTPException(400, "Cannot claim your own task")
+        db.execute(
+            "UPDATE marketplace SET status='claimed', claimed_by=?, claimed_at=? WHERE task_id=? AND status='open'",
+            (agent_id, now, task_id)
+        )
+    _fire_webhooks(task["creator_agent"], "marketplace.task.claimed", {
+        "task_id": task_id, "claimed_by": agent_id, "title": task["title"],
+    })
+    return {"task_id": task_id, "status": "claimed", "claimed_by": agent_id}
+
+@app.post("/v1/marketplace/tasks/{task_id}/deliver", tags=["Marketplace"])
+def marketplace_deliver(task_id: str, req: MarketplaceDeliverRequest, agent_id: str = Depends(get_agent_id)):
+    """Submit a deliverable for a claimed task."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        task = db.execute("SELECT * FROM marketplace WHERE task_id=?", (task_id,)).fetchone()
+        if not task:
+            raise HTTPException(404, "Task not found")
+        if task["status"] != "claimed":
+            raise HTTPException(400, f"Task is not claimed (status: {task['status']})")
+        if task["claimed_by"] != agent_id:
+            raise HTTPException(403, "Only the claimant can deliver")
+        db.execute(
+            "UPDATE marketplace SET status='delivered', result=?, delivered_at=? WHERE task_id=?",
+            (_encrypt(req.result), now, task_id)
+        )
+    _fire_webhooks(task["creator_agent"], "marketplace.task.delivered", {
+        "task_id": task_id, "delivered_by": agent_id, "title": task["title"],
+    })
+    return {"task_id": task_id, "status": "delivered"}
+
+@app.post("/v1/marketplace/tasks/{task_id}/review", tags=["Marketplace"])
+def marketplace_review(task_id: str, req: MarketplaceReviewRequest, agent_id: str = Depends(get_agent_id)):
+    """Accept or reject a delivery. Accepting awards credits to the worker."""
+    with get_db() as db:
+        task = db.execute("SELECT * FROM marketplace WHERE task_id=?", (task_id,)).fetchone()
+        if not task:
+            raise HTTPException(404, "Task not found")
+        if task["status"] != "delivered":
+            raise HTTPException(400, f"Task is not delivered (status: {task['status']})")
+        if task["creator_agent"] != agent_id:
+            raise HTTPException(403, "Only the creator can review")
+        credits_awarded = 0
+        if req.accept:
+            db.execute(
+                "UPDATE marketplace SET status='completed', rating=? WHERE task_id=?",
+                (req.rating, task_id)
+            )
+            if task["reward_credits"] and task["reward_credits"] > 0:
+                db.execute(
+                    "UPDATE agents SET credits = credits + ? WHERE agent_id=?",
+                    (task["reward_credits"], task["claimed_by"])
+                )
+                credits_awarded = task["reward_credits"]
+            _fire_webhooks(task["claimed_by"], "marketplace.task.completed", {
+                "task_id": task_id, "credits_awarded": credits_awarded, "rating": req.rating,
+            })
+            return {"task_id": task_id, "status": "completed", "credits_awarded": credits_awarded}
+        else:
+            db.execute(
+                "UPDATE marketplace SET status='open', claimed_by=NULL, claimed_at=NULL, "
+                "delivered_at=NULL, result=NULL WHERE task_id=?",
+                (task_id,)
+            )
+            return {"task_id": task_id, "status": "open", "credits_awarded": 0}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COORDINATION TESTING FRAMEWORK
+# ═══════════════════════════════════════════════════════════════════════════════
+
+COORDINATION_PATTERNS = {"leader_election", "consensus", "load_balancing", "pub_sub_fanout", "task_auction"}
+
+class ScenarioCreateRequest(BaseModel):
+    name: Optional[str] = Field(None, max_length=128)
+    pattern: str = Field(..., description="One of: leader_election, consensus, load_balancing, pub_sub_fanout, task_auction")
+    agent_count: int = Field(..., ge=2, le=20)
+    timeout_seconds: int = Field(60, ge=5, le=300)
+    success_criteria: Optional[dict] = Field(None)
+
+def _run_coordination_pattern(pattern: str, agent_count: int, timeout_seconds: int) -> dict:
+    """Run a deterministic coordination pattern simulation."""
+    start = time.time()
+    agents = [f"test_agent_{i}" for i in range(agent_count)]
+
+    if pattern == "leader_election":
+        rounds = 0
+        messages = 0
+        priorities = {a: random.randint(1, 1000) for a in agents}
+        candidates = set(agents)
+        while len(candidates) > 1 and (time.time() - start) < timeout_seconds:
+            rounds += 1
+            new_candidates = set()
+            for c in candidates:
+                higher = [o for o in candidates if priorities[o] > priorities[c]]
+                messages += len(higher)
+                if not higher:
+                    new_candidates.add(c)
+            candidates = new_candidates if new_candidates else {max(candidates, key=lambda a: priorities[a])}
+        leader = list(candidates)[0] if candidates else None
+        return {
+            "pattern": "leader_election", "success": leader is not None,
+            "rounds": rounds, "messages_sent": messages, "elected_leader": leader,
+            "latency_ms": round((time.time() - start) * 1000, 2), "agent_count": agent_count,
+        }
+
+    elif pattern == "consensus":
+        values = {a: random.choice([0, 1]) for a in agents}
+        rounds = 0
+        messages = 0
+        agreed = False
+        while (time.time() - start) < timeout_seconds:
+            rounds += 1
+            messages += agent_count * (agent_count - 1)
+            counts = {0: 0, 1: 0}
+            for v in values.values():
+                counts[v] += 1
+            majority = 0 if counts[0] >= counts[1] else 1
+            values = {a: majority for a in agents}
+            if len(set(values.values())) == 1:
+                agreed = True
+                break
+        return {
+            "pattern": "consensus", "success": agreed,
+            "rounds": rounds, "final_value": list(values.values())[0],
+            "messages_sent": messages, "agreement_reached": agreed,
+            "latency_ms": round((time.time() - start) * 1000, 2), "agent_count": agent_count,
+        }
+
+    elif pattern == "load_balancing":
+        task_count = max(100, agent_count * 10)
+        assignments = {a: 0 for a in agents}
+        for i in range(task_count):
+            assignments[agents[i % agent_count]] += 1
+        loads = list(assignments.values())
+        return {
+            "pattern": "load_balancing", "success": True,
+            "total_tasks": task_count, "tasks_per_agent": assignments,
+            "max_load": max(loads), "min_load": min(loads),
+            "std_deviation": round(statistics.stdev(loads), 2) if len(loads) > 1 else 0,
+            "balance_score": round(min(loads) / max(loads), 3) if max(loads) > 0 else 1.0,
+            "latency_ms": round((time.time() - start) * 1000, 2), "agent_count": agent_count,
+        }
+
+    elif pattern == "pub_sub_fanout":
+        subscribers = agents[1:]
+        messages_published = 10
+        deliveries = 0
+        failed = 0
+        for _ in range(messages_published):
+            for _ in subscribers:
+                if random.random() > 0.02:
+                    deliveries += 1
+                else:
+                    failed += 1
+        total_expected = messages_published * len(subscribers)
+        return {
+            "pattern": "pub_sub_fanout", "success": deliveries > 0,
+            "publisher": agents[0], "subscriber_count": len(subscribers),
+            "messages_published": messages_published,
+            "total_deliveries": deliveries, "failed_deliveries": failed,
+            "delivery_rate": round(deliveries / total_expected, 3) if total_expected > 0 else 0,
+            "latency_ms": round((time.time() - start) * 1000, 2), "agent_count": agent_count,
+        }
+
+    elif pattern == "task_auction":
+        task_count = 5
+        auctions = []
+        total_bids = 0
+        collisions = 0
+        for t in range(task_count):
+            bids = {a: random.randint(1, 100) for a in agents}
+            total_bids += len(bids)
+            max_bid = max(bids.values())
+            winners = [a for a, b in bids.items() if b == max_bid]
+            if len(winners) > 1:
+                collisions += 1
+            auctions.append({"task": t, "winner": random.choice(winners), "winning_bid": max_bid})
+        return {
+            "pattern": "task_auction", "success": True,
+            "tasks_auctioned": task_count, "total_bids": total_bids,
+            "collisions": collisions, "auctions": auctions,
+            "latency_ms": round((time.time() - start) * 1000, 2), "agent_count": agent_count,
+        }
+
+    return {"pattern": pattern, "success": False, "error": "Unknown pattern"}
+
+@app.post("/v1/testing/scenarios", tags=["Testing"])
+def scenario_create(req: ScenarioCreateRequest, agent_id: str = Depends(get_agent_id)):
+    """Create a coordination test scenario."""
+    if req.pattern not in COORDINATION_PATTERNS:
+        raise HTTPException(400, f"Invalid pattern. Valid: {sorted(COORDINATION_PATTERNS)}")
+    scenario_id = f"scenario_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO test_scenarios (scenario_id, creator_agent, name, pattern, agent_count, "
+            "timeout_seconds, success_criteria, status, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (scenario_id, agent_id, req.name, req.pattern, req.agent_count,
+             req.timeout_seconds, json.dumps(req.success_criteria) if req.success_criteria else None,
+             "created", now)
+        )
+    return {"scenario_id": scenario_id, "status": "created", "pattern": req.pattern, "created_at": now}
+
+@app.get("/v1/testing/scenarios", tags=["Testing"])
+def scenario_list(
+    pattern: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = Query(20, le=100),
+    agent_id: str = Depends(get_agent_id),
+):
+    """List your test scenarios."""
+    conditions = ["creator_agent=?"]
+    params: list = [agent_id]
+    if pattern:
+        conditions.append("pattern=?")
+        params.append(pattern)
+    if status:
+        conditions.append("status=?")
+        params.append(status)
+    where = " AND ".join(conditions)
+    params.append(limit)
+    with get_db() as db:
+        rows = db.execute(
+            f"SELECT * FROM test_scenarios WHERE {where} ORDER BY created_at DESC LIMIT ?", params
+        ).fetchall()
+    scenarios = []
+    for r in rows:
+        d = dict(r)
+        d["success_criteria"] = json.loads(d["success_criteria"]) if d["success_criteria"] else None
+        if d["results"]:
+            d["results"] = json.loads(_decrypt(d["results"]))
+        scenarios.append(d)
+    return {"scenarios": scenarios, "count": len(scenarios)}
+
+@app.post("/v1/testing/scenarios/{scenario_id}/run", tags=["Testing"])
+def scenario_run(scenario_id: str, agent_id: str = Depends(get_agent_id)):
+    """Run a coordination test scenario."""
+    with get_db() as db:
+        row = db.execute("SELECT * FROM test_scenarios WHERE scenario_id=?", (scenario_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Scenario not found")
+        if row["creator_agent"] != agent_id:
+            raise HTTPException(403, "Only the creator can run this scenario")
+        if row["status"] == "running":
+            raise HTTPException(409, "Scenario is already running")
+        db.execute("UPDATE test_scenarios SET status='running' WHERE scenario_id=?", (scenario_id,))
+    results = _run_coordination_pattern(row["pattern"], row["agent_count"], row["timeout_seconds"])
+    now = datetime.now(timezone.utc).isoformat()
+    final_status = "completed" if results.get("success") else "failed"
+    with get_db() as db:
+        db.execute(
+            "UPDATE test_scenarios SET status=?, results=?, completed_at=? WHERE scenario_id=?",
+            (final_status, _encrypt(json.dumps(results)), now, scenario_id)
+        )
+    return {"scenario_id": scenario_id, "status": final_status, "results": results, "completed_at": now}
+
+@app.get("/v1/testing/scenarios/{scenario_id}/results", tags=["Testing"])
+def scenario_results(scenario_id: str, agent_id: str = Depends(get_agent_id)):
+    """Get results for a test scenario."""
+    with get_db() as db:
+        row = db.execute("SELECT * FROM test_scenarios WHERE scenario_id=?", (scenario_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Scenario not found")
+    if row["creator_agent"] != agent_id:
+        raise HTTPException(403, "Only the creator can view results")
+    d = dict(row)
+    d["success_criteria"] = json.loads(d["success_criteria"]) if d["success_criteria"] else None
+    d["results"] = json.loads(_decrypt(d["results"])) if d["results"] else None
+    return d
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1255,6 +1840,11 @@ def admin_dashboard(_: bool = Depends(_verify_admin_session)):
         schedules = db.execute("SELECT COUNT(*) as c FROM scheduled_tasks WHERE enabled=1").fetchone()["c"]
         shared_keys = db.execute("SELECT COUNT(*) as c FROM shared_memory").fetchone()["c"]
         public_agents = db.execute("SELECT COUNT(*) as c FROM agents WHERE public=1").fetchone()["c"]
+        collab_count = db.execute("SELECT COUNT(*) as c FROM collaborations").fetchone()["c"]
+        market_open = db.execute("SELECT COUNT(*) as c FROM marketplace WHERE status='open'").fetchone()["c"]
+        market_completed = db.execute("SELECT COUNT(*) as c FROM marketplace WHERE status='completed'").fetchone()["c"]
+        total_credits = db.execute("SELECT COALESCE(SUM(credits),0) as c FROM agents").fetchone()["c"]
+        scenario_count = db.execute("SELECT COUNT(*) as c FROM test_scenarios").fetchone()["c"]
 
     return {
         "agents": [dict(a) for a in agents],
@@ -1271,8 +1861,13 @@ def admin_dashboard(_: bool = Depends(_verify_admin_session)):
             "active_webhooks": webhooks,
             "active_schedules": schedules,
             "websocket_connections": sum(len(s) for s in _ws_connections.values()),
+            "collaborations": collab_count,
+            "marketplace_open": market_open,
+            "marketplace_completed": market_completed,
+            "total_credits_circulation": total_credits,
+            "test_scenarios": scenario_count,
         },
-        "version": "0.4.0",
+        "version": "0.5.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "encryption_enabled": _fernet is not None,
     }
@@ -1442,6 +2037,10 @@ def admin_agent_detail(agent_id: str, _: bool = Depends(_verify_admin_session)):
         wh = db.execute("SELECT * FROM webhooks WHERE agent_id=?", (agent_id,)).fetchall()
         sched = db.execute("SELECT * FROM scheduled_tasks WHERE agent_id=?", (agent_id,)).fetchall()
         shared = db.execute("SELECT * FROM shared_memory WHERE owner_agent=? ORDER BY updated_at DESC LIMIT 100", (agent_id,)).fetchall()
+        collabs = db.execute("SELECT * FROM collaborations WHERE agent_id=? OR partner_agent=? ORDER BY created_at DESC LIMIT 100", (agent_id, agent_id)).fetchall()
+        market_created = db.execute("SELECT * FROM marketplace WHERE creator_agent=? ORDER BY created_at DESC LIMIT 100", (agent_id,)).fetchall()
+        market_claimed = db.execute("SELECT * FROM marketplace WHERE claimed_by=? ORDER BY created_at DESC LIMIT 100", (agent_id,)).fetchall()
+        scenarios = db.execute("SELECT * FROM test_scenarios WHERE creator_agent=? ORDER BY created_at DESC LIMIT 100", (agent_id,)).fetchall()
     mem_list = [dict(r) for r in memory]
     for m in mem_list:
         m["value"] = _decrypt(m["value"])
@@ -1462,6 +2061,20 @@ def admin_agent_detail(agent_id: str, _: bool = Depends(_verify_admin_session)):
     shared_list = [dict(r) for r in shared]
     for s in shared_list:
         s["value"] = _decrypt(s["value"])
+    collab_list = [dict(r) for r in collabs]
+    for c in collab_list:
+        if c.get("task_type"):
+            c["task_type"] = _decrypt(c["task_type"])
+    market_list = [_parse_marketplace_row(r) for r in market_created]
+    claimed_list = [_parse_marketplace_row(r) for r in market_claimed]
+    scenario_list = []
+    for r in scenarios:
+        d = dict(r)
+        if d.get("results"):
+            d["results"] = json.loads(_decrypt(d["results"]))
+        if d.get("success_criteria"):
+            d["success_criteria"] = json.loads(d["success_criteria"])
+        scenario_list.append(d)
     return {
         "agent": dict(agent),
         "memory": mem_list,
@@ -1471,6 +2084,10 @@ def admin_agent_detail(agent_id: str, _: bool = Depends(_verify_admin_session)):
         "webhooks": [{**dict(r), "event_types": json.loads(r["event_types"])} for r in wh],
         "schedules": sched_list,
         "shared_memory": shared_list,
+        "collaborations": collab_list,
+        "marketplace_created": market_list,
+        "marketplace_claimed": claimed_list,
+        "test_scenarios": scenario_list,
     }
 
 @app.delete("/admin/api/agents/{agent_id}", tags=["Admin"])
@@ -1487,8 +2104,73 @@ def admin_delete_agent(agent_id: str, _: bool = Depends(_verify_admin_session)):
         db.execute("DELETE FROM scheduled_tasks WHERE agent_id=?", (agent_id,))
         db.execute("DELETE FROM shared_memory WHERE owner_agent=?", (agent_id,))
         db.execute("DELETE FROM rate_limits WHERE agent_id=?", (agent_id,))
+        db.execute("DELETE FROM collaborations WHERE agent_id=? OR partner_agent=?", (agent_id, agent_id))
+        db.execute("DELETE FROM marketplace WHERE creator_agent=?", (agent_id,))
+        db.execute("UPDATE marketplace SET status='open', claimed_by=NULL, claimed_at=NULL, delivered_at=NULL, result=NULL WHERE claimed_by=?", (agent_id,))
+        db.execute("DELETE FROM test_scenarios WHERE creator_agent=?", (agent_id,))
         db.execute("DELETE FROM agents WHERE agent_id=?", (agent_id,))
     return {"status": "deleted", "agent_id": agent_id}
+
+@app.get("/admin/api/collaborations", tags=["Admin"])
+def admin_collaborations(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    agent_id: Optional[str] = None,
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all collaborations."""
+    with get_db() as db:
+        if agent_id:
+            rows = db.execute(
+                "SELECT * FROM collaborations WHERE agent_id=? OR partner_agent=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (agent_id, agent_id, limit, offset)
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM collaborations WHERE agent_id=? OR partner_agent=?", (agent_id, agent_id)).fetchone()["c"]
+        else:
+            rows = db.execute("SELECT * FROM collaborations ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM collaborations").fetchone()["c"]
+    collabs = [dict(r) for r in rows]
+    for c in collabs:
+        if c.get("task_type"):
+            c["task_type"] = _decrypt(c["task_type"])
+    return {"collaborations": collabs, "total": total, "limit": limit, "offset": offset}
+
+@app.get("/admin/api/marketplace", tags=["Admin"])
+def admin_marketplace(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all marketplace tasks."""
+    with get_db() as db:
+        if status:
+            rows = db.execute("SELECT * FROM marketplace WHERE status=? ORDER BY created_at DESC LIMIT ? OFFSET ?", (status, limit, offset)).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM marketplace WHERE status=?", (status,)).fetchone()["c"]
+        else:
+            rows = db.execute("SELECT * FROM marketplace ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+            total = db.execute("SELECT COUNT(*) as c FROM marketplace").fetchone()["c"]
+    return {"tasks": [_parse_marketplace_row(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+@app.get("/admin/api/scenarios", tags=["Admin"])
+def admin_scenarios(
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    _: bool = Depends(_verify_admin_session),
+):
+    """Browse all test scenarios."""
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM test_scenarios ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+        total = db.execute("SELECT COUNT(*) as c FROM test_scenarios").fetchone()["c"]
+    scenarios = []
+    for r in rows:
+        d = dict(r)
+        if d.get("results"):
+            d["results"] = json.loads(_decrypt(d["results"]))
+        if d.get("success_criteria"):
+            d["success_criteria"] = json.loads(d["success_criteria"])
+        scenarios.append(d)
+    return {"scenarios": scenarios, "total": total, "limit": limit, "offset": offset}
 
 @app.get("/admin/login", response_class=HTMLResponse, tags=["Admin"])
 def admin_login_page():
@@ -1557,7 +2239,7 @@ def health():
 
     return {
         "status": "operational",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "stats": {
             "registered_agents": agent_count,
             "public_agents": public_agents,
@@ -1585,6 +2267,10 @@ def stats(agent_id: str = Depends(get_agent_id)):
         wh_count = db.execute("SELECT COUNT(*) as c FROM webhooks WHERE agent_id=? AND active=1", (agent_id,)).fetchone()["c"]
         sched_count = db.execute("SELECT COUNT(*) as c FROM scheduled_tasks WHERE agent_id=? AND enabled=1", (agent_id,)).fetchone()["c"]
         shared_count = db.execute("SELECT COUNT(*) as c FROM shared_memory WHERE owner_agent=?", (agent_id,)).fetchone()["c"]
+        collabs_given = db.execute("SELECT COUNT(*) as c FROM collaborations WHERE agent_id=?", (agent_id,)).fetchone()["c"]
+        collabs_recv = db.execute("SELECT COUNT(*) as c FROM collaborations WHERE partner_agent=?", (agent_id,)).fetchone()["c"]
+        market_created = db.execute("SELECT COUNT(*) as c FROM marketplace WHERE creator_agent=?", (agent_id,)).fetchone()["c"]
+        market_completed = db.execute("SELECT COUNT(*) as c FROM marketplace WHERE claimed_by=? AND status='completed'", (agent_id,)).fetchone()["c"]
 
     return {
         "agent_id": agent_id,
@@ -1598,6 +2284,12 @@ def stats(agent_id: str = Depends(get_agent_id)):
         "active_webhooks": wh_count,
         "active_schedules": sched_count,
         "shared_memory_keys": shared_count,
+        "credits": agent["credits"] or 0,
+        "reputation": agent["reputation"] or 0.0,
+        "collaborations_given": collabs_given,
+        "collaborations_received": collabs_recv,
+        "marketplace_tasks_created": market_created,
+        "marketplace_tasks_completed": market_completed,
     }
 
 
@@ -1609,7 +2301,7 @@ def stats(agent_id: str = Depends(get_agent_id)):
 def root():
     return {
         "service": "AgentForge",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "docs": "/docs",
         "description": "Open-source toolkit API for autonomous agents",
         "endpoints": {
@@ -1622,6 +2314,10 @@ def root():
             "relay_ws": "WS /v1/relay/ws",
             "webhooks": "/v1/webhooks",
             "directory": "/v1/directory",
+            "directory_search": "GET /v1/directory/search",
+            "directory_match": "GET /v1/directory/match",
+            "marketplace": "/v1/marketplace/tasks",
+            "testing": "/v1/testing/scenarios",
             "text": "/v1/text/process",
             "health": "GET /v1/health",
             "sla": "GET /v1/sla",

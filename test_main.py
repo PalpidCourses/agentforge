@@ -701,12 +701,16 @@ class TestHealthAndStats:
         r = client.get("/")
         assert r.status_code == 200
         d = r.json()
-        assert d["version"] == "0.4.0"
+        assert d["version"] == "0.5.0"
         assert "webhooks" in d["endpoints"]
         assert "schedules" in d["endpoints"]
         assert "shared_memory" in d["endpoints"]
         assert "directory" in d["endpoints"]
         assert "relay_ws" in d["endpoints"]
+        assert "marketplace" in d["endpoints"]
+        assert "testing" in d["endpoints"]
+        assert "directory_search" in d["endpoints"]
+        assert "directory_match" in d["endpoints"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -731,3 +735,336 @@ class TestRateLimiting:
 
         r = client.get("/v1/memory", headers=h)
         assert r.status_code == 429
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENHANCED DISCOVERY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestEnhancedDiscovery:
+    def test_search_no_filters(self):
+        _, _, h = register_agent()
+        client.put("/v1/directory/me", json={"description": "bot", "capabilities": ["test"], "public": True}, headers=h)
+        r = client.get("/v1/directory/search")
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+    def test_search_by_capability(self):
+        _, _, h = register_agent()
+        client.put("/v1/directory/me", json={"description": "nlp bot", "capabilities": ["nlp", "sentiment"], "public": True}, headers=h)
+        r = client.get("/v1/directory/search?capability=nlp")
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+        assert any("nlp" in a["capabilities"] for a in r.json()["agents"])
+
+    def test_search_by_availability(self):
+        _, _, h = register_agent()
+        client.put("/v1/directory/me", json={"description": "bot", "capabilities": ["avail"], "public": True}, headers=h)
+        r = client.get("/v1/directory/search?available=true")
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+    def test_search_by_min_reputation(self):
+        r = client.get("/v1/directory/search?min_reputation=5.0")
+        assert r.status_code == 200
+        assert r.json()["count"] == 0
+
+    def test_status_update_available(self):
+        _, _, h = register_agent()
+        r = client.patch("/v1/directory/me/status", json={"available": False}, headers=h)
+        assert r.status_code == 200
+        profile = client.get("/v1/directory/me", headers=h).json()
+        assert profile["available"] is False
+
+    def test_status_update_looking_for(self):
+        _, _, h = register_agent()
+        r = client.patch("/v1/directory/me/status", json={"looking_for": ["nlp", "scraping"]}, headers=h)
+        assert r.status_code == 200
+        profile = client.get("/v1/directory/me", headers=h).json()
+        assert "nlp" in profile["looking_for"]
+
+    def test_status_update_busy_until(self):
+        _, _, h = register_agent()
+        r = client.patch("/v1/directory/me/status", json={"busy_until": "2099-01-01T00:00:00+00:00"}, headers=h)
+        assert r.status_code == 200
+        profile = client.get("/v1/directory/me", headers=h).json()
+        assert profile["available"] is False
+
+    def test_log_collaboration(self):
+        aid1, _, h1 = register_agent("agent-a")
+        aid2, _, h2 = register_agent("agent-b")
+        r = client.post("/v1/directory/collaborations", json={
+            "partner_agent": aid2, "task_type": "sentiment_analysis", "outcome": "success", "rating": 5
+        }, headers=h1)
+        assert r.status_code == 200
+        assert r.json()["partner_new_reputation"] == 5.0
+
+    def test_collaboration_updates_reputation(self):
+        aid1, _, h1 = register_agent()
+        aid2, _, h2 = register_agent()
+        client.post("/v1/directory/collaborations", json={"partner_agent": aid2, "outcome": "success", "rating": 4}, headers=h1)
+        client.post("/v1/directory/collaborations", json={"partner_agent": aid2, "outcome": "success", "rating": 2}, headers=h1)
+        profile = client.get("/v1/directory/me", headers=h2).json()
+        assert profile["reputation"] == 3.0
+
+    def test_collaboration_self_denied(self):
+        aid1, _, h1 = register_agent()
+        r = client.post("/v1/directory/collaborations", json={"partner_agent": aid1, "outcome": "success", "rating": 5}, headers=h1)
+        assert r.status_code == 400
+
+    def test_collaboration_bad_outcome(self):
+        aid1, _, h1 = register_agent()
+        aid2, _, h2 = register_agent()
+        r = client.post("/v1/directory/collaborations", json={"partner_agent": aid2, "outcome": "invalid", "rating": 5}, headers=h1)
+        assert r.status_code == 400
+
+    def test_collaboration_bad_partner(self):
+        _, _, h = register_agent()
+        r = client.post("/v1/directory/collaborations", json={"partner_agent": "agent_nonexistent", "outcome": "success", "rating": 5}, headers=h)
+        assert r.status_code == 404
+
+    def test_match_basic(self):
+        aid1, _, h1 = register_agent()
+        aid2, _, h2 = register_agent()
+        client.put("/v1/directory/me", json={"description": "matcher", "capabilities": ["sentiment_analysis"], "public": True}, headers=h2)
+        r = client.get("/v1/directory/match?need=sentiment_analysis", headers=h1)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+    def test_match_excludes_self(self):
+        _, _, h = register_agent()
+        client.put("/v1/directory/me", json={"capabilities": ["unique_cap"], "public": True}, headers=h)
+        r = client.get("/v1/directory/match?need=unique_cap", headers=h)
+        assert r.status_code == 200
+        assert r.json()["count"] == 0
+
+    def test_directory_me_new_fields(self):
+        _, _, h = register_agent()
+        profile = client.get("/v1/directory/me", headers=h).json()
+        assert "reputation" in profile
+        assert "credits" in profile
+        assert "available" in profile
+        assert "looking_for" in profile
+
+    def test_stats_new_fields(self):
+        _, _, h = register_agent()
+        stats = client.get("/v1/stats", headers=h).json()
+        assert "credits" in stats
+        assert "reputation" in stats
+        assert "collaborations_given" in stats
+        assert "marketplace_tasks_created" in stats
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TASK MARKETPLACE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestMarketplace:
+    def test_create_task(self):
+        _, _, h = register_agent()
+        r = client.post("/v1/marketplace/tasks", json={
+            "title": "Analyze tweets", "category": "nlp", "requirements": ["sentiment"],
+            "reward_credits": 50, "priority": 5,
+        }, headers=h)
+        assert r.status_code == 200
+        assert r.json()["status"] == "open"
+
+    def test_browse_tasks(self):
+        _, _, h = register_agent()
+        client.post("/v1/marketplace/tasks", json={"title": "Task A", "category": "test"}, headers=h)
+        r = client.get("/v1/marketplace/tasks?status=open")
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+    def test_browse_filter_category(self):
+        _, _, h = register_agent()
+        client.post("/v1/marketplace/tasks", json={"title": "Cat task", "category": "unique_cat"}, headers=h)
+        r = client.get("/v1/marketplace/tasks?category=unique_cat")
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+    def test_get_task_detail(self):
+        _, _, h = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Detail test"}, headers=h).json()
+        r = client.get(f"/v1/marketplace/tasks/{task['task_id']}")
+        assert r.status_code == 200
+        assert r.json()["title"] == "Detail test"
+
+    def test_get_task_not_found(self):
+        r = client.get("/v1/marketplace/tasks/mktask_nonexistent")
+        assert r.status_code == 404
+
+    def test_claim_task(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Claim test"}, headers=h1).json()
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        assert r.status_code == 200
+        assert r.json()["status"] == "claimed"
+
+    def test_claim_own_task_denied(self):
+        _, _, h = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Self claim"}, headers=h).json()
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h)
+        assert r.status_code == 400
+
+    def test_claim_already_claimed(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        _, _, h3 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Double claim"}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h3)
+        assert r.status_code == 409
+
+    def test_deliver_result(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Deliver test"}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/deliver", json={"result": "done!"}, headers=h2)
+        assert r.status_code == 200
+        assert r.json()["status"] == "delivered"
+
+    def test_deliver_wrong_agent(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        _, _, h3 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Wrong deliver"}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/deliver", json={"result": "nope"}, headers=h3)
+        assert r.status_code == 403
+
+    def test_review_accept_awards_credits(self):
+        _, _, h1 = register_agent()
+        aid2, _, h2 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Review test", "reward_credits": 100}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/deliver", json={"result": "output"}, headers=h2)
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/review", json={"accept": True, "rating": 5}, headers=h1)
+        assert r.status_code == 200
+        assert r.json()["status"] == "completed"
+        assert r.json()["credits_awarded"] == 100
+        stats = client.get("/v1/stats", headers=h2).json()
+        assert stats["credits"] == 100
+
+    def test_review_reject_reopens(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Reject test"}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/deliver", json={"result": "bad"}, headers=h2)
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/review", json={"accept": False}, headers=h1)
+        assert r.status_code == 200
+        assert r.json()["status"] == "open"
+        detail = client.get(f"/v1/marketplace/tasks/{task['task_id']}").json()
+        assert detail["status"] == "open"
+        assert detail["claimed_by"] is None
+
+    def test_review_wrong_agent(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Wrong review"}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/deliver", json={"result": "out"}, headers=h2)
+        r = client.post(f"/v1/marketplace/tasks/{task['task_id']}/review", json={"accept": True}, headers=h2)
+        assert r.status_code == 403
+
+    def test_credits_in_profile(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        task = client.post("/v1/marketplace/tasks", json={"title": "Credits test", "reward_credits": 25}, headers=h1).json()
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/claim", headers=h2)
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/deliver", json={"result": "ok"}, headers=h2)
+        client.post(f"/v1/marketplace/tasks/{task['task_id']}/review", json={"accept": True, "rating": 4}, headers=h1)
+        profile = client.get("/v1/directory/me", headers=h2).json()
+        assert profile["credits"] == 25
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COORDINATION TESTING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCoordinationTesting:
+    def test_create_scenario(self):
+        _, _, h = register_agent()
+        r = client.post("/v1/testing/scenarios", json={
+            "name": "test_election", "pattern": "leader_election", "agent_count": 5
+        }, headers=h)
+        assert r.status_code == 200
+        assert r.json()["status"] == "created"
+
+    def test_create_invalid_pattern(self):
+        _, _, h = register_agent()
+        r = client.post("/v1/testing/scenarios", json={"pattern": "invalid", "agent_count": 3}, headers=h)
+        assert r.status_code == 400
+
+    def test_list_scenarios(self):
+        _, _, h = register_agent()
+        client.post("/v1/testing/scenarios", json={"pattern": "consensus", "agent_count": 3}, headers=h)
+        r = client.get("/v1/testing/scenarios", headers=h)
+        assert r.status_code == 200
+        assert r.json()["count"] >= 1
+
+    def test_run_leader_election(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "leader_election", "agent_count": 5}, headers=h).json()
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        assert r.status_code == 200
+        assert r.json()["status"] in ("completed", "failed")
+        assert "elected_leader" in r.json()["results"]
+
+    def test_run_consensus(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "consensus", "agent_count": 4}, headers=h).json()
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        assert r.status_code == 200
+        assert "agreement_reached" in r.json()["results"]
+
+    def test_run_load_balancing(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "load_balancing", "agent_count": 4}, headers=h).json()
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        assert r.status_code == 200
+        assert r.json()["results"]["balance_score"] == 1.0
+
+    def test_run_pub_sub_fanout(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "pub_sub_fanout", "agent_count": 5}, headers=h).json()
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        assert r.status_code == 200
+        assert r.json()["results"]["delivery_rate"] > 0.9
+
+    def test_run_task_auction(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "task_auction", "agent_count": 6}, headers=h).json()
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        assert r.status_code == 200
+        assert r.json()["results"]["tasks_auctioned"] == 5
+
+    def test_get_results(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "consensus", "agent_count": 3}, headers=h).json()
+        client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        r = client.get(f"/v1/testing/scenarios/{s['scenario_id']}/results", headers=h)
+        assert r.status_code == 200
+        assert r.json()["results"] is not None
+
+    def test_run_not_found(self):
+        _, _, h = register_agent()
+        r = client.post("/v1/testing/scenarios/scenario_nonexistent/run", headers=h)
+        assert r.status_code == 404
+
+    def test_run_not_owner(self):
+        _, _, h1 = register_agent()
+        _, _, h2 = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "consensus", "agent_count": 3}, headers=h1).json()
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h2)
+        assert r.status_code == 403
+
+    def test_rerun_completed(self):
+        _, _, h = register_agent()
+        s = client.post("/v1/testing/scenarios", json={"pattern": "leader_election", "agent_count": 3}, headers=h).json()
+        client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        r = client.post(f"/v1/testing/scenarios/{s['scenario_id']}/run", headers=h)
+        assert r.status_code == 200

@@ -56,8 +56,8 @@ class AgentForge:
         r.raise_for_status()
         return r.json()
 
-    def _patch(self, path, **params):
-        r = self._s.patch(self._url(path), params=params)
+    def _patch(self, path, json=None, **params):
+        r = self._s.patch(self._url(path), json=json, params=params)
         r.raise_for_status()
         return r.json()
 
@@ -237,6 +237,117 @@ class AgentForge:
         if capability:
             params["capability"] = capability
         return self._get("/v1/directory", **params)
+
+    def directory_search(self, capability=None, available=None, min_reputation=None, limit=50):
+        """Search agents with filters."""
+        params = {"limit": limit}
+        if capability:
+            params["capability"] = capability
+        if available is not None:
+            params["available"] = available
+        if min_reputation:
+            params["min_reputation"] = min_reputation
+        return self._get("/v1/directory/search", **params)
+
+    def directory_status(self, available=None, looking_for=None, busy_until=None):
+        """Update your availability status."""
+        body = {}
+        if available is not None:
+            body["available"] = available
+        if looking_for is not None:
+            body["looking_for"] = looking_for
+        if busy_until is not None:
+            body["busy_until"] = busy_until
+        return self._patch("/v1/directory/me/status", json=body)
+
+    def collaboration_log(self, partner_agent, outcome, rating, task_type=None):
+        """Log a collaboration outcome. Updates partner's reputation."""
+        body = {"partner_agent": partner_agent, "outcome": outcome, "rating": rating}
+        if task_type:
+            body["task_type"] = task_type
+        return self._post("/v1/directory/collaborations", json=body)
+
+    def directory_match(self, need, min_reputation=0.0, limit=10):
+        """Find agents matching a capability need."""
+        return self._get("/v1/directory/match", need=need, min_reputation=min_reputation, limit=limit)
+
+    # ── Marketplace ─────────────────────────────────────────────────────────
+
+    def marketplace_create(self, title, description=None, category=None, requirements=None,
+                           reward_credits=0, priority=0, estimated_effort=None, tags=None, deadline=None):
+        """Post a task to the marketplace."""
+        body = {"title": title, "reward_credits": reward_credits, "priority": priority}
+        if description:
+            body["description"] = description
+        if category:
+            body["category"] = category
+        if requirements:
+            body["requirements"] = requirements
+        if estimated_effort:
+            body["estimated_effort"] = estimated_effort
+        if tags:
+            body["tags"] = tags
+        if deadline:
+            body["deadline"] = deadline
+        return self._post("/v1/marketplace/tasks", json=body)
+
+    def marketplace_browse(self, category=None, status="open", tag=None, min_reward=0, limit=50):
+        """Browse marketplace tasks."""
+        params = {"status": status, "limit": limit}
+        if category:
+            params["category"] = category
+        if tag:
+            params["tag"] = tag
+        if min_reward:
+            params["min_reward"] = min_reward
+        return self._get("/v1/marketplace/tasks", **params)
+
+    def marketplace_get(self, task_id):
+        """Get marketplace task details."""
+        return self._get(f"/v1/marketplace/tasks/{task_id}")
+
+    def marketplace_claim(self, task_id):
+        """Claim an open marketplace task."""
+        return self._post(f"/v1/marketplace/tasks/{task_id}/claim")
+
+    def marketplace_deliver(self, task_id, result):
+        """Submit a deliverable for a claimed task."""
+        return self._post(f"/v1/marketplace/tasks/{task_id}/deliver", json={"result": result})
+
+    def marketplace_review(self, task_id, accept, rating=None):
+        """Accept or reject a delivery. Accepting awards credits."""
+        body = {"accept": accept}
+        if rating is not None:
+            body["rating"] = rating
+        return self._post(f"/v1/marketplace/tasks/{task_id}/review", json=body)
+
+    # ── Coordination Testing ────────────────────────────────────────────────
+
+    def scenario_create(self, pattern, agent_count, name=None, timeout_seconds=60, success_criteria=None):
+        """Create a coordination test scenario."""
+        body = {"pattern": pattern, "agent_count": agent_count, "timeout_seconds": timeout_seconds}
+        if name:
+            body["name"] = name
+        if success_criteria:
+            body["success_criteria"] = success_criteria
+        return self._post("/v1/testing/scenarios", json=body)
+
+    def scenario_list(self, pattern=None, status=None, limit=20):
+        """List your test scenarios."""
+        params = {"limit": limit}
+        if pattern:
+            params["pattern"] = pattern
+        if status:
+            params["status"] = status
+        return self._get("/v1/testing/scenarios", **params)
+
+    def scenario_run(self, scenario_id):
+        """Run a coordination test scenario."""
+        return self._post(f"/v1/testing/scenarios/{scenario_id}/run")
+
+    def scenario_results(self, scenario_id):
+        """Get results for a test scenario."""
+        return self._get(f"/v1/testing/scenarios/{scenario_id}/results")
 
     # ── Text Utilities ───────────────────────────────────────────────────────
 
